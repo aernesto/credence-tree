@@ -6,16 +6,47 @@
 
   <meta charset='UTF-8'>
 
-  <title>todo</title>
+  <title>Knowledge Tree</title>
   <meta name='author' content='Nicholas Hanson-Holtry'>
 
-  <link rel="stylesheet" type="text/css" href="/stylesheets/main.css" />
+  <link rel='stylesheet' type='text/css' href='/stylesheets/main.css' />
 
 </head>
 
 <body>
 
 <% include ../partials/header.ejs %>
+
+<span class='full-page background-image'></span>
+
+<table class='full-page header'>
+  <tr>
+    <td>
+        <a href=''>Link 1</a><br/>
+        <a href=''>Link 2</a><br/>
+        <a href=''>Link 3</a>
+    </td>
+    <td></td>
+    <td>
+        <a href=''>Login</a> /
+        <a href=''>Join</a>
+    </td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>
+        <form>
+            <textarea name='query' cols='30' rows='4' placeholder='&#13;&#10;Search Knowledge Tree for assertions and arguments...'></textarea>
+        </form>
+    </td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Knowledge Tree</td>
+    <td></td>
+    <td class='small'>A searchable database of assertions and arguments made by professional philosophers. Enter one or more keywords to start searching.</td>
+  </tr>
+</table>
 
 </body>
 
