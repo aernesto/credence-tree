@@ -1,22 +1,21 @@
 
-body {
+html, html body {
+
   margin: 0;
+
+  width: 100vw;
+  height: 100vh;
+
 }
 
-  body .full-page {
-
-    width: 100%;
-    height: 100%;
+  html body div#content-panel-background-image {
 
     top: 0;
-    bottom: 0;
     left: 0;
-    right: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -100;
     position: absolute;
-
-  }
-
-  body .background-image {
 
     overflow: hidden;
     object-fit: cover;
@@ -27,35 +26,65 @@ body {
 
   }
 
-  body table.header {
+  html body div#content-panel {
 
-    padding: 0;
-    border-spacing: 10px;
-    border-collapse: separate;
-    border-collapse: collapse;
+    padding-top: 5vmin;
+    padding-bottom: 5vmin;
+    padding-left: 5vmin;
+    padding-right: 5vmin;
 
-    /*text-shadow: 0px 0px 1px #ffffff;*/
-
-    font-size: 200%;
+    width: calc(100vw - 10vmin);
+    height: calc(100vh - 10vmin);
 
   }
 
-    body table.header tr {
-      text-align: center;
+    html body div#content-panel 
+    table#home-page-table {
+
+      width: 100%;
+      height: 100%;
+
+      border: 0;
+      table-layout: fixed;
+      border-collapse: collapse;
+
+      font-size: 20px;
+
     }
 
-    body table.header td {
-      height: 33%;
-      width: 33%;
-      padding: 0;
-      text-align: center;
-    }
+      html body div#content-panel 
+      table#home-page-table tr {
 
-      body table.header td.small {
-        font-size: 75%;
+        width: 20%;
+
+        text-align: center;
+
+        text-shadow: 0px 0px 1px #ffffff;
+
       }
 
-    body table.header form textarea {
-      font-size: 100%;
-      resize: none;
-    }
+      html body div#content-panel 
+      table#home-page-table td {
+
+        padding: 0;
+
+        height: 20%;
+
+        /*border: 1px solid black;*/
+        
+      }
+
+        html body div#content-panel 
+        table#home-page-table td input#basic-search {
+
+          padding: 0;
+          padding-top: 0.5em;
+          padding-bottom: 0.5em;
+
+          border: 1px solid black;
+
+          width: calc(100% - 2px);
+
+          font-size: 20px;
+          
+        }
