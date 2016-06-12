@@ -8,7 +8,7 @@ todo
 ### technologies:
 
 * platform: [Heroku](https://www.heroku.com/)
-* runtime: [Node.js](https://nodejs.org/en/)
+* runtime: [Node](https://nodejs.org/en/)
 * framework: [Express](http://expressjs.com/)
 * templating: [EJS](http://ejs.co/)
 
