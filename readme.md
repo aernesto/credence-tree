@@ -10,7 +10,8 @@ todo
 * platform: [Heroku](https://www.heroku.com/)
 * runtime: [Node](https://nodejs.org/en/)
 * framework: [Express](http://expressjs.com/)
-* templating: [EJS](http://ejs.co/)
+* HTML templating: [EJS](http://ejs.co/)
+* CSS processing: [Less](http://lesscss.org/)
 
 ### originally created from:
 
