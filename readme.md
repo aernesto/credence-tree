@@ -1,7 +1,7 @@
 
 ## description
 
-todo
+a database of assertions and arguments made by professional philosophers
 
 ## technical information
 
