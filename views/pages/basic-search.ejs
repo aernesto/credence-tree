@@ -9,6 +9,20 @@
   <% include ../partials/table-rows/basic-search.ejs %>
 </table>
 
-<br/> you queried "<%= query %>"
+<br/>
+you queried "<%= query %>"
+
+<br/>
+<br/>
+your results are:
+<ul>
+  <% results.forEach(function(row) { %>
+    <li>
+      (id: <%= row.id %>)
+      (tags: <%= row.metadata_tags %>)
+      <%= row.proposition %>
+    </li>
+  <% }); %>
+</ul>
 
 <% include ../partials/end-body.ejs %>

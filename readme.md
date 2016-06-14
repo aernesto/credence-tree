@@ -10,6 +10,7 @@ a database of assertions and arguments made by professional philosophers
 * platform: [Heroku](https://www.heroku.com/)
 * runtime: [Node](https://nodejs.org/en/)
 * framework: [Express](http://expressjs.com/)
+* database: [PostgreSQL](https://www.postgresql.org/)
 * HTML templating: [EJS](http://ejs.co/)
 * CSS processing: [Less](http://lesscss.org/)
 

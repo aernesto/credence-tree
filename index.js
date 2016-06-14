@@ -14,6 +14,9 @@ app.set('view engine', 'ejs');
 app.use(lessMiddleware(__dirname + '/public')); // 1
 app.use(express.static(__dirname + '/public')); // 2
 
+var pg = require('pg');     
+pg.defaults.ssl = true;
+
 // routing information
 
 app.get('/', function(request, response) {
@@ -21,7 +24,22 @@ app.get('/', function(request, response) {
 });
 
 app.get('/basic-search', urlencodedParser, function(request, response) {
-  response.render('pages/basic-search', {query: request.param('query')});
+  pg.connect(process.env.DATABASE_URL, function(error, client, done) {
+    query_text = request.query['query'];
+    client.query('select * from search_propositions($1)',
+          [query_text], function(error, result) {
+      done();
+      if (error) {
+        console.error(err);
+        response.send("error: " + err);
+      } else {
+        response.render('pages/basic-search', {
+          query: query_text,
+          results: result.rows
+        });
+      }
+    });
+  });
 });
 
 // run the app

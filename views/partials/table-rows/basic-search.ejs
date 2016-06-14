@@ -3,8 +3,12 @@
   <td colspan='1' class='width1'></td>
   <td colspan='3' class='width3'>
     <form action='/basic-search' method='get'>
-      <input id='basic-search' name='query' rows='1' 
-      placeholder='Search Credence Tree for assertions and arguments...'>
+      <input id='basic-search' name='query' rows='1'
+      <% if (typeof query !== 'undefined') { %>
+        placeholder= <%= query %> >
+      <% } else { %>
+        placeholder='Search Credence Tree for assertions and arguments...'>
+      <% } %>
       </textarea>
     </form>
   </td>
