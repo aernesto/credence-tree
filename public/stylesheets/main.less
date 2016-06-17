@@ -1,4 +1,8 @@
 
+::-webkit-scrollbar {
+
+  display: none; }
+
 html {
 
   .top-level-mixin () {
@@ -8,6 +12,7 @@ html {
     width: 100vw;
     height: 100vh;
 
+    overflow-y: scroll;
     overflow-x: hidden; }
 
   .top-level-mixin();
@@ -16,11 +21,7 @@ html {
 
     .top-level-mixin();
 
-    .grey {
-
-      background-color: #f6f6f6; }
-
-    div#home-page-background-image {
+    div#background-image {
 
       top: 0;
       left: 0;
@@ -50,12 +51,15 @@ html {
 
         table-layout: fixed;
 
-        font-size: 20px;
+        .font-size () {
+
+          font-size: 18px; }
+
+        .font-size();
 
         tr {
 
           text-align: center;
-
           text-shadow: 0px 0px 1px #ffffff; }
 
         td, th {
@@ -88,14 +92,29 @@ html {
 
           .height-mixin(1);
 
+          .text-mixin () {
+
+            padding: 0.5em;
+
+            border: 1px solid rgba(0,0,0,0.25);
+
+            width: ~'calc(100% - 1em - 2px)';
+
+            background-color: #ffffff;
+
+            border-radius: 0.25em;
+            box-shadow: 0 0 0 0.25em rgba(0,0,0,0.25);
+
+            text-align: left;
+            .font-size(); }
+
+          div.content-panel {
+
+            .text-mixin();
+
+            padding-top:    1em;
+            padding-bottom: 1em; }
+
           input#basic-search {
 
-            padding: 0;
-            padding-top: 0.5em;
-            padding-bottom: 0.5em;
-
-            border: 1px solid black;
-
-            width: ~'calc(100% - 2px)';
-
-            font-size: 20px; } } } } } }
+            .text-mixin(); } } } } } }

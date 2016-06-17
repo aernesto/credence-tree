@@ -3,26 +3,33 @@
 <% include ../partials/end-head.ejs %>
 <% include ../partials/begin-body.ejs %>
 
-<table class='grey'>
+<div id='background-image'></div>
+
+<table>
+
   <% include ../partials/table-rows/table-format.ejs %>
   <% include ../partials/table-rows/header.ejs %>
+  <% include ../partials/table-rows/empty.ejs %>
   <% include ../partials/table-rows/basic-search.ejs %>
+
+  <tr>
+    <td colspan='1' class='width1'></td>
+    <td colspan='3' class='width3'>
+      <div class='content-panel'>
+        <% for (var i = 0; i < results.length; i++) { %>
+          <% var row = results[i]; %>
+          <% if (i > 0) { %>
+            <br/> <br/> <% } %>
+          <a href=''>
+            <%= row.id %>)
+            <%= row.proposition %>
+          </a>
+        <% } %>
+      </div>
+    </td>
+    <td colspan='1' class='width1'></td>
+  </tr>
+
 </table>
-
-<br/>
-you queried "<%= query %>"
-
-<br/>
-<br/>
-your results are:
-<ul>
-  <% results.forEach(function(row) { %>
-    <li>
-      (id: <%= row.id %>)
-      (tags: <%= row.metadata_tags %>)
-      <%= row.proposition %>
-    </li>
-  <% }); %>
-</ul>
 
 <% include ../partials/end-body.ejs %>
