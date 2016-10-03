@@ -1,0 +1,94 @@
+
+<%
+
+function expandAssertion (assertionObj) {
+  if (assertionObj != undefined) {
+    var typeA = assertionObj.typeA,
+        typeB = assertionObj.typeB,
+        left = assertionObj.left,
+        right = assertionObj.right,
+        prop = assertionObj.prop;
+    if (typeA == 1) {
+      var opString = 'error',
+          rightString = expandAssertion(right);
+      if (typeB == 2) { opString = '~'; }
+      else if (typeB == 3) { opString = '&#9671;'; }
+      else if (typeB == 4) { opString = '&#9633;'; }
+      return opString + '(' + rightString + ')'; }
+    else if (typeA == 2) {
+      var opString = 'error',
+          leftString = expandAssertion(left),
+          rightString = expandAssertion(right);
+      if (typeB == 1) { opString = '&#8743;'; }
+      else if (typeB == 2) { opString = '&#8744;'; }
+      else if (typeB == 3) { opString = '&#8594;'; }
+      else if (typeB == 4) { opString = '&#8596;'; }
+      else if (typeB == 5) { opString = '='; }
+      return '(' + leftString + ')' +
+          opString + '(' + rightString + ')'; }
+    else if (typeA == 3) { return prop; }
+    else { return 'error'; }}
+  else { return 'error'; }}
+
+function expandArgument (argumentObj) {
+  if (argumentObj != undefined) {
+    var premiseID = 1,
+        returnString = '';
+    while (true) {
+      var curPremiseID = 'P' + premiseID,
+          curPremiseVal = argumentObj[curPremiseID];
+      if (curPremiseVal) {
+        if (premiseID > 1) { returnString += '<br/>'; }
+        returnString += curPremiseID + ': ' + expandAssertion(curPremiseVal);
+        premiseID++; }
+      else { break; } }
+    returnString += '<br/>C: ' + expandAssertion(argumentObj['C']);
+    return returnString; }
+  else { return 'error'; }}
+
+%>
+
+<tr>
+  <td colspan='1' class='width1 results'></td>
+  <td colspan='3' class='width3 results'>
+
+    <div class='left-label'>
+    <a href='#' onclick='showAssertions(this);'>assertions</a> /
+    <a href='#' onclick='showArguments(this);'>arguments</a></div>
+    <div class='right-label'></div>
+
+  </td>
+  <td colspan='1' class='width1 results'></td>
+</tr>
+
+<tr>
+  <td colspan='1' class='width1 results'></td>
+  <td colspan='3' class='width3 results'>
+
+    <div class='assertions content-panel'> <br/>
+
+      <% if (assertionResults.length == 0) { %> no assertion results <% } %>
+
+      <% for (var i = 0; i < assertionResults.length; i++) { %>
+        <% var assertionObj = assertionResults[i]; %>
+        <% if (i > 0) { %> <br/> <br/> <% } %>
+        <%- expandAssertion(assertionObj); %>
+      <% } %>
+
+    <br/> <br/> </div>
+
+    <div class='arguments content-panel hidden'> <br/>
+
+      <% if (argumentResults.length == 0) { %> no argument results <% } %>
+
+      <% for (var i = 0; i < argumentResults.length; i++) { %>
+        <% var argumentObj = argumentResults[i]; %>
+        <% if (i > 0) { %> <br/> <br/> <% } %>
+        <%- expandArgument(argumentObj); %>
+      <% } %>
+
+    <br/> <br/> </div>
+
+  </td>
+  <td colspan='1' class='width1 results'></td>
+</tr>

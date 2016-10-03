@@ -1,0 +1,14 @@
+
+<div class='outer-area'>
+  <div class='label'><%= personType %> information</div>
+  <div class='inner-area'>
+    <input type='text' class='citation' name-template='<%= typeLetter %>sn'
+      onchange='textInputChanged(this);' group='1'
+      which='1' placeholder='surname'></input><br/>
+    <input type='text' class='citation' name-template='<%= typeLetter %>gn'
+      onchange='textInputChanged(this);' group='1'
+      which='1' placeholder='given name(s)'></input><br/>
+  </div>
+  <div class='label indent add-<%= personType %>'><a href='#' 
+    onclick='addAnotherPerson(this);'> add another <%= personType %></a></div>
+</div>

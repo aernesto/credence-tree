@@ -1,0 +1,9 @@
+
+<!-- inputName(string) is the name of this radio button -->
+<!-- inputValue(integer) is the value of this radio button -->
+<!-- inputContents(string) is the label/contents of this radio button -->
+
+<input type='radio' name='<%= inputName %>'
+value='<%= inputValue %>' onclick='radioInputClicked(this);'
+<% try { if (eval(inputName) == inputValue) { %> checked <% }}
+catch (e) {} %> > </input> <%= inputContents %> <br/>

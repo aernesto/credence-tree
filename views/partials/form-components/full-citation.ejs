@@ -1,0 +1,35 @@
+
+<div class='content-panel citation'>
+
+  <% personType = 'author'; typeLetter = 'a'; %>
+  <% include ./person-citation.ejs %>
+
+  <div class='label'>source information</div>
+  <input type='radio' class='citation' name-template='source'
+    value='1' onclick='radioInputClicked(this);'></input>monograph<br/>
+  <input type='radio' class='citation' name-template='source'
+    value='2' onclick='radioInputClicked(this);'></input>edited collection<br/>
+  <input type='radio' class='citation' name-template='source'
+    value='3' onclick='radioInputClicked(this);'></input>periodical<br/>
+
+  <input type='text' class='citation' onchange='textInputChanged(this);'
+    name-template='title' placeholder='title'></input> <br/>
+  <input type='text' class='citation' onchange='textInputChanged(this);'
+    name-template='publisher' placeholder='publisher'></input> <br/>
+  <input type='text' class='citation' onchange='textInputChanged(this);'
+    name-template='year' placeholder='year'></input> <br/>
+
+  <div id='additional-3' style='display: none;'>
+    <input type='text' class='citation' onchange='textInputChanged(this);'
+      name-template='volume' placeholder='volume'></input> <br/>
+  </div>
+
+  <div id='additional-2' style='display: none;'>
+    <% personType = 'editor'; typeLetter = 'e'; %>
+    <% include ./person-citation.ejs %>
+  </div>
+
+  <div id='additional-1' style='display: none;'>
+  </div>
+
+</div>

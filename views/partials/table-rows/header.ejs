@@ -1,18 +1,44 @@
 
 <tr>
+
   <td colspan='2' class='width2'>
-    <a href='/'>* LOGO HERE *</a>
+    <a href='/'>* CREDENCE TREE LOGO *</a>
     <br/> <br/>
-    <a href=''>recent</a> /
-    <a href=''>popular</a> /
-    <a href=''>tutorial</a> /
-    <a href=''>news</a> /
-    <a href=''>about</a> /
-    <a href=''>contact us</a>
+    <a>recent</a> /
+    <a>popular</a> /
+    <a>tutorial</a> /
+    <a>news</a> /
+    <a>about</a> /
+    <a>contact us</a>
   </td>
-  <td colspan='2' class='width2'></td>
-  <td colspan='1' class='width1'>
-    <a href=''>login</a> /
-    <a href=''>join</a>
-  </td>
+
+  <% if ((typeof userInfo == 'undefined') ||
+      (typeof userInfo.id == 'undefined') ||
+      (userInfo.id == '')) { %>
+
+    <td colspan='2' class='width2'></td>
+    <td colspan='1' class='width1' id='sign-in-td'>
+      <a href='#' id='login'>login</a> /
+      <a href='#' id='join'>join</a>
+    </td>
+
+  <% } else { %>
+
+    <% if (userInfo.canContribute != true) { %>
+      <td colspan='2' class='width2'></td>
+      <td colspan='1' class='width1'>
+    <% } else { %>
+      <td colspan='1' class='width1'></td>
+      <td colspan='2' class='width2'>
+    <% } %>
+
+      <a href='/user?id=<%=userInfo.id%>'>my profile</a> /
+      <% if (userInfo.canContribute == true) { %>
+        <a href='/contribute'>contribute</a> / <% } %>
+      <% if (userInfo.canAdministrate == true) { %>
+        <a href='/admin'>administrate</a> / <% } %>
+      <a href='/logout'>logout</a>
+
+    </td> <% } %>
+
 </tr>

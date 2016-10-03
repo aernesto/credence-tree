@@ -1,49 +1,228 @@
 
-// set-up dependencies
+// set-up the environment
 
-var lessMiddleware = require('less-middleware');
+var environment = process.env;
 
-var bodyParser = require('body-parser')
-var urlencodedParser = bodyParser.urlencoded({extended: false})
+const clientID = '192586835739-25ptn67tpin84bnr34f8ei8qu5pcjaeo';
+const appID = clientID + '.apps.googleusercontent.com';
 
-var express = require('express');
-var app = express();
-app.set('port', (process.env.PORT || 5000));
+// include Node dependencies
+
+var express = require('express'),
+    app = express();
+app.set('port', (environment.PORT || 5000));
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
+
+var cookieParser = require('cookie-parser');
+app.use(cookieParser());
+
+var lessMiddleware = require('less-middleware');
 app.use(lessMiddleware(__dirname + '/public')); // 1
 app.use(express.static(__dirname + '/public')); // 2
+
+var session = require('express-session'),
+    RedisStore = require('connect-redis')(session);
+app.use(session({
+  store: new RedisStore({
+    url: environment.REDIS_URL }),
+  secret: environment.SESSION_SECRET,
+  saveUninitialized: false,
+  resave: false }));
+
+var bodyParser = require('body-parser'),
+    urlencodedParser = bodyParser.urlencoded({extended: false});
+app.use(urlencodedParser);
 
 var pg = require('pg');     
 pg.defaults.ssl = true;
 
-// routing information
+var https = require('https');
 
-app.get('/', function(request, response) {
-  response.render('pages/home');
-});
+var fs = require('fs');
 
-app.get('/basic-search', urlencodedParser, function(request, response) {
-  pg.connect(process.env.DATABASE_URL, function(error, client, done) {
-    query_text = request.query['query'];
-    client.query('select * from search_propositions($1)',
-          [query_text], function(error, result) {
-      done();
-      if (error) {
-        console.error(err);
-        response.send("error: " + err);
-      } else {
-        response.render('pages/basic-search', {
-          query: query_text,
-          results: result.rows
-        });
-      }
-    });
-  });
-});
+var marked = require ('marked');
+var md = function (filename) {
+  var path = __dirname + '/public/files/' + filename,
+      include = fs.readFileSync(path, 'utf8'),
+      html = marked(include);
+  return html; };
 
-// run the app
+// include other Credence Tree files
 
-app.listen(app.get('port'), function() {
-  console.log('Node app is running on port', app.get('port'));
-});
+var database = require('./psql/queries')(environment, pg);
+
+// define custom helper functions
+
+function getNaryRequestParameters (data, parameterName) {
+  var naryData = {}, i;
+  for (i = 1; ; i++) {
+    var thisParameter = parameterName + i;
+    if (data[thisParameter]) {
+      naryData[thisParameter] = data[thisParameter]; }
+    else { break; }}
+  return naryData; }
+
+function mergeObjects (object1, object2) {
+  for (var parameterName in object2) {
+    object1[parameterName] = object2[parameterName]; }
+  return object1; }
+
+function redirectTo (response, location) {
+  response.writeHead(302, {'Location': location});
+  response.end(); }
+
+function redirectToUserPage (response, id) {
+  redirectTo(response, '/user?id=' + id); }
+
+function alreadyLoggedIn (request, response) {
+  if (request && request.session && request.session.userInfo) {
+    var userID = request.session.userInfo.id;
+    if (userID) {
+      redirectToUserPage(response, userID);
+      return true; }}
+  return false; }
+
+function setUpNewUserSession (request, user) {
+  request.session.userInfo = {};
+  request.session.userInfo.id = user.id;
+  request.session.userInfo.canContribute = user.can_contribute;
+  request.session.userInfo.canAdministrate = user.can_administrate; }
+
+function canContribute (request) {
+  return request && request.session && request.session.userInfo 
+      && request.session.userInfo.canContribute; }
+function canAdministrate (request) {
+  return request && request.session && request.session.userInfo 
+      && request.session.userInfo.canAdministrate; }
+function getUserID (request) {
+  if (request && request.session && request.session.userInfo) {
+    return request.session.userInfo.id; }
+  else { return undefined; }}
+
+// set-up routing and app logic
+
+app.get('/', function (request, response) {
+  response.render('pages/home', {
+    userInfo: request.session.userInfo}); });
+
+app.get('/logout', function (request, response) {
+  request.session.regenerate( function () {
+    redirectTo(response, '/'); }); });
+
+app.get('/terms-and-conditions', function (request, response) {
+  response.render('pages/md-file-wrapper', {
+    userInfo: request.session.userInfo, md: md,
+    filename: 'terms-and-conditions.md'}); });
+app.get('/privacy-statement', function (request, response) {
+  response.render('pages/md-file-wrapper', {
+    userInfo: request.session.userInfo, md: md,
+    filename: 'privacy-statement.md'}); });
+app.get('/legal-disclaimer', function (request, response) {
+  response.render('pages/md-file-wrapper', {
+    userInfo: request.session.userInfo, md: md,
+    filename: 'legal-disclaimer.md'}); });
+
+app.get('/user', function (request, response) {
+  response.render('pages/md-file-wrapper', {
+    userInfo: request.session.userInfo, md: md,
+    filename: 'coming-soon.md'}); });
+app.get('/admin', function (request, response) {
+  response.render('pages/md-file-wrapper', {
+    userInfo: request.session.userInfo, md: md,
+    filename: 'coming-soon.md'}); });
+
+app.get('/search', function (request, response) {
+  var queryObj = request.query;
+  database.search(queryObj, function (dbResults) {
+    response.render('pages/search', {
+      userInfo: request.session.userInfo,
+      assertionResults: dbResults.assertions,
+      argumentResults: dbResults.arguments,
+      query: dbResults.query,
+      text: dbResults.text }); }); });
+
+app.get('/contribute', function (request, response) {
+  if (canContribute(request)) {
+    var queryObj = request.query;
+    database.contribute(queryObj, getUserID(request), function (results) {
+      response.render('pages/contribute', {
+        userInfo: request.session.userInfo,
+        contributionPage: true,
+        query: queryObj,
+        contribResults: results }); }); }
+  else { // TODO: "you do not have the permissions to do x" page
+    redirectTo(response, '/'); }});
+
+app.post('/google-sign-in', function (request, response) {
+  if (!alreadyLoggedIn(request, response)) {
+    https.request({
+      host: 'www.googleapis.com',
+      path: '/oauth2/v3/tokeninfo?id_token=' + request.body.idtoken },
+    function (oauthResponse) {
+      var responseText = '';
+      oauthResponse.on('data', function (chunk) {
+        responseText += chunk; });
+      oauthResponse.on('end', function () {
+        responseClaims = JSON.parse(responseText);
+        if (responseClaims.aud.indexOf(appID) != -1) {
+          database.googleIdToUser(responseClaims.sub, function (user) {
+            if (user != undefined) {
+              setUpNewUserSession(request, user);
+              response.send({'redirectURL': '/user?id=' + user.id}); }
+            else {
+              request.session.googleResponseClaims = responseClaims;
+              response.send({'redirectURL': '/join'}); }}); }
+        else {
+          response.send('error'); }});
+    }).end(); }});
+
+app.get('/join', function (request, response) {
+  if (!alreadyLoggedIn(request, response)) {
+    var defaultData = request.session.googleResponseClaims,
+        user_type = request.query['user_type'],
+        surname = request.query['surname'] || defaultData.family_name,
+        given_name_s = request.query['given_name_s'] || defaultData.given_name,
+        department = request.query['department'],
+        institution = request.query['institution'],
+        academic_email_address = request.query['academic_email_address'],
+        preferred_email_address = request.query['preferred_email_address'],
+        privacy_setting = request.query['privacy_setting'],
+        contact_rate = request.query['contact_rate'],
+        legal_notice = request.query['legal_notice'],
+        specializations = getNaryRequestParameters(request.query, 'specialization'),
+        google_id = defaultData.sub;
+    database.makeNewUser(google_id, legal_notice, surname, given_name_s, 
+        user_type, department, institution, academic_email_address,
+        preferred_email_address, privacy_setting, contact_rate, specializations,
+        function (userID_or_failure) {
+          if (userID_or_failure) {
+            var userID = userID_or_failure;
+            database.userIdToUser(userID, function (user) {
+              setUpNewUserSession(request, user);
+              redirectToUserPage(response, userID); }); }
+          else {
+            database.getUserSpecializations(2, function (choices_2) {
+              // TODO: refactor this object construction, the initial
+              // assignment above, and the call to makeNewUser()
+              var data = {
+                user_type: user_type,
+                surname: surname,
+                given_name_s: given_name_s,
+                department: department,
+                institution: institution,
+                academic_email_address: academic_email_address,
+                preferred_email_address: preferred_email_address,
+                privacy_setting: privacy_setting,
+                contact_rate: contact_rate,
+                specialization_choices_2: choices_2};
+              response.render('pages/join', 
+                  mergeObjects(data, specializations)); }); }}); }});
+
+// finally, run the app!
+
+var port = app.get('port');
+app.listen(port, function () {
+  console.log('Credence Tree is now running on port ' + port + '.'); });
+
+// done

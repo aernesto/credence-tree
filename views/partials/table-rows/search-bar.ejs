@@ -1,0 +1,121 @@
+
+<% if (typeof query == 'object') { %>
+<script type='application/json' id='previous-query'>
+<%- JSON.stringify(query) %> </script> <% } %>
+
+<tr>
+  <td colspan='1' class='width1'></td>
+  <td colspan='3' class='width3 align-top'>
+
+    <% var formAction = '/search';
+       if (typeof contributionPage !== 'undefined') {
+         if (contributionPage == true) {
+           formAction = '/contribute'; }} %>
+    <form class='search' action='<%= formAction %>' method='get'>
+
+      <div id='search-form-padding'></div>
+
+      <div class='left-label'>
+      <a href='#' onclick='switchToBasicSearch();'>basic</a> /
+      <a href='#' onclick='switchToAdvancedSearch();'>advanced</a></div>
+      <div class='right-label'></div>
+
+      <div id='search-form-area'>
+        <table>
+          <tr>
+            <td>
+
+              <input type='text' class='search' name='query' rows='1'
+              <% if (typeof query == 'string') { %>
+              value = '<%= query %>' placeholder = '<%= query %>' <% } else { %>
+              placeholder = 'Search Credence Tree for assertions and arguments...'
+              <% } %> > </input>
+
+            </td>
+          </tr>
+        </table>
+      </div>
+
+    </form>
+
+    <div class='hidden' id='basic-search-staging-area'></div>
+
+    <div class='hidden' id='advanced-search-staging-area'></div>
+
+    <div class='hidden' id='search-input-template'>
+
+      <input type='text' class='search' rows='1'
+      onKeyPress='maybeSubmit(event);'
+      onchange='textInputChanged(this);'></input>
+
+    </div>
+
+    <div class='hidden' id='left-logic-template'>
+      
+      <select class='logic' onchange='logicalChanged(this);'>
+        <option value='0' short=''        spaces='0' description=' '></option>
+        <option value='1' short='('       spaces='0' description=' '></option>
+        <option value='2' short='~'       spaces='2' description='not'></option>
+        <option value='3' short='&#9633;' spaces='2' description='necessarily'></option>
+        <option value='4' short='&#9671;' spaces='2' description='possibly'></option>
+        <option value='5' short='&#8743;' spaces='2' description='and'></option>
+        <option value='6' short='&#8744;' spaces='2' description='or'></option>
+        <option value='7' short='&#8594;' spaces='0' description='implies'></option>
+        <option value='8' short='&#8596;' spaces='1' description='if and only if'></option>
+        <option value='9' short='='       spaces='2' description='is identical to'></option>
+      </select>
+
+    </div>
+
+    <div class='hidden' id='right-logic-template'>
+      
+      <select class='logic' onchange='logicalChanged(this);'>
+        <option value='0' short=''  spaces='0' description=' '></option>
+        <option value='1' short=')' spaces='0' description=' '></option>
+      </select>
+
+    </div>
+
+    <div class='hidden' id='content-group-location-template'>
+      
+      <select onchange='selectChanged(this);'>
+        <option value='1'>IN: assertions and arguments</option>
+        <option value='2'>IN: premises</option>
+        <option value='3'>IN: conclusions</option>
+      </select>
+
+    </div>
+
+    <div class='hidden' id='citation-group-location-template'>
+      
+      <select onchange='citationChanged(this);'>
+        <option value='4'>IN: citation</option>
+        <option value='5'>IN: author</option>
+        <option value='6'>IN: title</option>
+        <option value='7'>IN: year</option>
+        <option value='8'>IN: full citation</option>
+      </select>
+
+    </div>
+
+    <div class='hidden' id='group-logic-template'>
+      
+      <select class='group-logic' onchange='groupLogicalChanged(this);' first='true'>
+        <option value='0'  short=''        description=' '></option>
+        <option value='1'  short='AND'     spaces='8'  description='(citation)'></option>
+        <option value='2'  short='OR'      spaces='11' description='(citation)'></option>
+        <option value='3'  short='BUT NOT' spaces='0'  description='(citation)'></option>
+        <option value='4'  short='AND'     spaces='8'  description='(content)'></option>
+        <option value='5'  short='OR'      spaces='11' description='(content)'></option>
+        <option value='6'  short='BUT NOT' spaces='0'  description='(content)'></option>
+      </select>
+
+    </div>
+
+    <div class='hidden' id='full-citation-template'>
+      <% include ../form-components/full-citation.ejs %>
+    </div>
+
+  </td>
+  <td colspan='1' class='width1'></td>
+</tr>

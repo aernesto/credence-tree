@@ -1,0 +1,8 @@
+
+<!-- inputName(string) is the name of this text input -->
+<!-- inputPlaceholder(string) is the placeholder text of this text input -->
+
+<input type='text' name='<%= inputName %>'
+placeholder='<%= inputPlaceholder %>' onchange='textInputChanged(this);'
+<% try { if (eval(inputName) !== 'undefined') { %>
+value='<%= eval(inputName) %>' <% }} catch (e) {} %> ></input> <br/>

@@ -1,0 +1,130 @@
+
+<!-- On this join form, the areas of specialization are updated automatically
+(ie, they are pulled from the database every time). Everything else, however,
+is entered manually and will need to be updated by hand if these options are
+to change (in addition to updating the database to support such changes). -->
+
+<% include ../partials/begin-body.ejs %>
+
+<table>
+
+  <% include ../partials/table-rows/table-format.ejs %>
+  <% include ../partials/table-rows/header.ejs %>
+  <% include ../partials/table-rows/empty-short.ejs %>
+
+  <tr>
+    <td colspan='1' class='width1'></td>
+    <td colspan='3' class='width3'>
+      <div class='content-panel'>
+
+        <form action='/join' method='get'>
+
+          <% var inputName, inputContents, inputValue, inputPlaceholder; %>
+
+          <div class='label'>Join Credence Tree as a</div>
+
+            <% inputName = 'user_type'; %>
+            <% inputValue = 1; inputContents = 'member'; %>
+            <% include ../partials/form-components/radio-input.ejs %>
+
+            <% inputValue = 2; inputContents = 'contributor: philosopher'; %>
+            <% include ../partials/form-components/radio-input.ejs %>
+
+          <div class='label'>by filling in the following form:</div>
+
+            <% inputName = 'surname'; inputPlaceholder = 'surname'; %>
+            <% include ../partials/form-components/text-input.ejs %>
+
+            <% inputName = 'given_name_s'; inputPlaceholder = 'given name(s)'; %>
+            <% include ../partials/form-components/text-input.ejs %>
+
+            <div id='additional-form-info-area'></div>
+
+            <% inputName = 'preferred_email_address'; %>
+            <% inputPlaceholder = 'preferred email address for messages from Credence Tree'; %>
+            <% include ../partials/form-components/text-input.ejs %>
+
+            <div id='specializations-area'>
+            <% for (var i = 1; ; i++) { var thisName = 'specialization' + i, used = false; %>
+            <select name='<%= thisName %>' which='<%= i %>'>
+              <option value='' disabled selected>area of specialization #<%= i %></option>
+              <option value=''></option>
+              <% for (var j = 0; j < specialization_choices_2.length; j++) { %>
+                <% var specialization = specialization_choices_2[j]; %>
+                <option value='<%= specialization.id %>'
+                <% try {if (eval(thisName) == specialization.id) { 
+                used = true; %> selected <% }} catch (e) {} %>
+                ><%= specialization.specialization %></option> <% } %>
+              </select> <% if (!used) { break; } } %> </div>
+            <div class='label indent'><a href='#' 
+            onclick='addAnotherSpecialization(this);'>
+            add another specialization</a></div>
+
+          <div class='label'>privacy setting</div>
+
+            <% inputName = 'privacy_setting'; inputValue = 1; %>
+            <% inputContents = 'low: everyone can see which assertions and arguments I have contributed'; %>
+            <% include ../partials/form-components/radio-input.ejs %>
+
+            <% inputValue = 2; %>
+            <% inputContents = 'medium: only fellow contributors can see my contributions'; %>
+            <% include ../partials/form-components/radio-input.ejs %>
+
+            <% inputValue = 3; %>
+            <% inputContents = 'high: only administrators can see my contributions'; %>
+            <% include ../partials/form-components/radio-input.ejs %>
+
+          <div class='label'>contact rate</div>
+
+            <% inputName = 'contact_rate'; inputValue = 4; %>
+            <% inputContents = 'minimal: only contact me about password changes and other necessities'; %>
+            <% include ../partials/form-components/radio-input.ejs %>
+
+            <% inputValue = 1; %>
+            <% inputContents = 'low: contact me up to twice/year about improving Credence Tree'; %>
+            <% include ../partials/form-components/radio-input.ejs %>
+
+            <% inputValue = 2; %>
+            <% inputContents = 'medium: contact me up to once/month about improving Credence Tree'; %>
+            <% include ../partials/form-components/radio-input.ejs %>
+
+            <% inputValue = 3; %>
+            <% inputContents = 'high: contact me up to once/week about improving Credence Tree'; %>
+            <% include ../partials/form-components/radio-input.ejs %>
+
+          <div class='label'>legal notice</div>
+            
+            <input type='checkbox' name='legal_notice' value='accept'
+            <% if (typeof legal_notice !== 'undefined' && legal_notice == true)
+            { %> checked <% } %> ></input> I have read and accept the 
+            <a href='/terms-and-conditions' target='_blank'>terms and conditions</a>
+            for joining Credence Tree. <br/>
+            
+            <input type='submit'></input>
+
+        </form>
+
+        <div class='hidden' id='additional-form-info-staging-area-1'></div>
+
+        <div class='hidden' id='additional-form-info-staging-area-2'>
+
+          <% inputName = 'department'; inputPlaceholder = 'academic department'; %>
+          <% include ../partials/form-components/text-input.ejs %>
+
+          <% inputName = 'institution'; inputPlaceholder = 'academic institution'; %>
+          <% include ../partials/form-components/text-input.ejs %>
+
+          <% inputName = 'academic_email_address'; inputPlaceholder = 'academic email address'; %>
+          <% include ../partials/form-components/text-input.ejs %>
+          <div class='label indent'>(please note: this must be your email address at your institution)</div>
+
+        </div>
+
+      </div>
+    </td>
+    <td colspan='1' class='width1'></td>
+  </tr>
+
+</table>
+
+<% include ../partials/end-body.ejs %>
