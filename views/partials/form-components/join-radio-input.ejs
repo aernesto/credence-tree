@@ -4,6 +4,6 @@
 <!-- inputContents(string) is the label/contents of this radio button -->
 
 <input type='radio' name='<%= inputName %>'
-value='<%= inputValue %>' onclick='radioInputClicked(this);'
+value='<%= inputValue %>' onclick='joinRadioInputClicked(this);'
 <% try { if (eval(inputName) == inputValue) { %> checked <% }}
 catch (e) {} %> > </input> <%= inputContents %> <br/>

@@ -11,7 +11,7 @@ $(document).ready( function () {
 
   radioInputClicked($('[name="user_type"][checked]').first()); });
 
-function radioInputClicked (radioInputElement) {
+function joinRadioInputClicked (radioInputElement) {
 
   function switchTo1 () {
     if (curUserType ==  2) {

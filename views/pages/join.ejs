@@ -25,10 +25,10 @@ to change (in addition to updating the database to support such changes). -->
 
             <% inputName = 'user_type'; %>
             <% inputValue = 1; inputContents = 'member'; %>
-            <% include ../partials/form-components/radio-input.ejs %>
+            <% include ../partials/form-components/join-radio-input.ejs %>
 
             <% inputValue = 2; inputContents = 'contributor: philosopher'; %>
-            <% include ../partials/form-components/radio-input.ejs %>
+            <% include ../partials/form-components/join-radio-input.ejs %>
 
           <div class='label'>by filling in the following form:</div>
 
@@ -64,33 +64,33 @@ to change (in addition to updating the database to support such changes). -->
 
             <% inputName = 'privacy_setting'; inputValue = 1; %>
             <% inputContents = 'low: everyone can see which assertions and arguments I have contributed'; %>
-            <% include ../partials/form-components/radio-input.ejs %>
+            <% include ../partials/form-components/join-radio-input.ejs %>
 
             <% inputValue = 2; %>
             <% inputContents = 'medium: only fellow contributors can see my contributions'; %>
-            <% include ../partials/form-components/radio-input.ejs %>
+            <% include ../partials/form-components/join-radio-input.ejs %>
 
             <% inputValue = 3; %>
             <% inputContents = 'high: only administrators can see my contributions'; %>
-            <% include ../partials/form-components/radio-input.ejs %>
+            <% include ../partials/form-components/join-radio-input.ejs %>
 
           <div class='label'>contact rate</div>
 
             <% inputName = 'contact_rate'; inputValue = 4; %>
             <% inputContents = 'minimal: only contact me about password changes and other necessities'; %>
-            <% include ../partials/form-components/radio-input.ejs %>
+            <% include ../partials/form-components/join-radio-input.ejs %>
 
             <% inputValue = 1; %>
             <% inputContents = 'low: contact me up to twice/year about improving Credence Tree'; %>
-            <% include ../partials/form-components/radio-input.ejs %>
+            <% include ../partials/form-components/join-radio-input.ejs %>
 
             <% inputValue = 2; %>
             <% inputContents = 'medium: contact me up to once/month about improving Credence Tree'; %>
-            <% include ../partials/form-components/radio-input.ejs %>
+            <% include ../partials/form-components/join-radio-input.ejs %>
 
             <% inputValue = 3; %>
             <% inputContents = 'high: contact me up to once/week about improving Credence Tree'; %>
-            <% include ../partials/form-components/radio-input.ejs %>
+            <% include ../partials/form-components/join-radio-input.ejs %>
 
           <div class='label'>legal notice</div>
             
