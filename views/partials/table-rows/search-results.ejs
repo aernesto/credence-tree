@@ -67,24 +67,32 @@ function expandArgument (argumentObj) {
 
     <div class='assertions content-panel'> <br/>
 
-      <% if (assertionResults.length == 0) { %> no assertion results <% } %>
+      <% if (typeof assertionResults != 'undefined') { %>
 
-      <% for (var i = 0; i < assertionResults.length; i++) { %>
-        <% var assertionObj = assertionResults[i]; %>
-        <% if (i > 0) { %> <br/> <br/> <% } %>
-        <%- expandAssertion(assertionObj); %>
+        <% if (assertionResults.length == 0) { %> no assertion results <% } %>
+
+        <% for (var i = 0; i < assertionResults.length; i++) { %>
+          <% var assertionObj = assertionResults[i]; %>
+          <% if (i > 0) { %> <br/> <br/> <% } %>
+          <%- expandAssertion(assertionObj); %>
+        <% } %>
+
       <% } %>
 
     <br/> <br/> </div>
 
     <div class='arguments content-panel hidden'> <br/>
 
-      <% if (argumentResults.length == 0) { %> no argument results <% } %>
+      <% if (typeof argumentResults != 'undefined') { %>
 
-      <% for (var i = 0; i < argumentResults.length; i++) { %>
-        <% var argumentObj = argumentResults[i]; %>
-        <% if (i > 0) { %> <br/> <br/> <% } %>
-        <%- expandArgument(argumentObj); %>
+        <% if (argumentResults.length == 0) { %> no argument results <% } %>
+
+        <% for (var i = 0; i < argumentResults.length; i++) { %>
+          <% var argumentObj = argumentResults[i]; %>
+          <% if (i > 0) { %> <br/> <br/> <% } %>
+          <%- expandArgument(argumentObj); %>
+        <% } %>
+
       <% } %>
 
     <br/> <br/> </div>

@@ -1155,6 +1155,8 @@ module.exports = function (environment, pg) {
             numPremises = 0,
             numConclusions = 0,
             numCitations = 0,
+            premisesText = [],
+            conclusionText = undefined,
             // content bookkeeping
             groupLocations = {},
             groupPropQueries = {},
@@ -1233,8 +1235,9 @@ module.exports = function (environment, pg) {
 
                           if (similarResults.length > 0) {
                             textToAdd += perhapsYouMeant;
-                            returnInfo.push(textToAdd);
-                            returnInfo.push(similarResults); }
+                            similarResults.forEach( function (result) {
+                              textToAdd += lineReturn + result.proposition; });
+                            returnInfo.push(textToAdd); }
                           else {
                             returnInfo.push(textToAdd); }
 
@@ -1262,10 +1265,16 @@ module.exports = function (environment, pg) {
                         'intended order of operations has been maintained, no ' +
                         'logical operators have been dropped because of ' +
                         'incorrect semantic grouping, etc).' + lineBreak;
-                    textToAdd += createQuerySummaryString(
+                    var summaryString = createQuerySummaryString(
                         queriesToString, groupAsLogicString);
+                    textToAdd += summaryString;
                     returnInfo.push(textToAdd);
                     pushIsThisCorrect('logic');
+
+                    if (groupType == 2) {
+                      premisesText.push(summaryString); }
+                    else if (groupType == 3) {
+                      conclusionText = summaryString; }
 
                     nextGroup();
                   }
@@ -1449,6 +1458,21 @@ module.exports = function (environment, pg) {
               pushIsThisCorrect('no');
               returnInfo.push('ERROR: You may only submit ' +
                   'one assertion at a time.'); }
+
+            // argument overview
+            else if (!usingAssertions) {
+              var textToAdd = 'Argument Overview' + lineBreak + 'Lastly, ' +
+                  'it\'s time to evaluate the semantic interpretation of the ' +
+                  'argument as a whole. Please ensure that the individual ' +
+                  'assertions (which you have already checked and confirmed ' +
+                  'above) have been correctly combined into an argument (ie, ' +
+                  'correctly marked as premises vs conclusion, that the argument ' +
+                  'ought not be further broken down into sub-arguments, etc).';
+              premisesText.forEach( function (text) {
+                textToAdd += lineBreak + 'PREMISE' + lineReturn + text; });
+              textToAdd += lineBreak + 'CONCLUSION' + lineReturn + conclusionText;
+              returnInfo.push(textToAdd);
+              pushIsThisCorrect('logic'); }
 
             var confirmation = false,
                 pageLow = parseInt(queryObj['pagelow']),

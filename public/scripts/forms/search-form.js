@@ -34,7 +34,7 @@ $(document).ready( function () {
   fullCitationTemplate = $('#full-citation-template');
 
   if (thisIsContributionPage()) {
-    $('div.left-label').html('contribute to Credence Tree!');
+    $('form.search > div.left-label').html('contribute to Credence Tree!');
     $('div#content-group-location-template option[value="1"]').html('IN: assertions');
     $('div#citation-group-location-template option[value="4"]').remove();
     $('div#citation-group-location-template option[value="5"]').remove();
