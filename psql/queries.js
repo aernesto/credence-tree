@@ -715,12 +715,12 @@ module.exports = function (environment, pg) {
   }
 
   function fetchFullClaimByChildID (query, id, callback) {
-    console.log('fetchFullClaimByChildID(id: ' + id + ')');
+    // console.log('fetchFullClaimByChildID(id: ' + id + ')');
     var allAssertions = [], allArguments = [];
     query(searchAssertionsByAssertable(1), [id], function (assertionsResults) {
       query(searchArgumentsByAssertable(1), [id], function (argumentsResults) {
-        console.log('  assertions = ' + JSON.stringify(assertionsResults));
-        console.log('  arguments = ' + JSON.stringify(argumentsResults));
+        // console.log('  assertions = ' + JSON.stringify(assertionsResults));
+        // console.log('  arguments = ' + JSON.stringify(argumentsResults));
         function fetchOneAssertion () {
           var assertion = assertionsResults.pop();
           if (assertion != undefined) {
@@ -772,8 +772,8 @@ module.exports = function (environment, pg) {
                 }
               }
               else {
-                console.log('  allAssertions = ' + JSON.stringify(allAssertions));
-                console.log('  allArguments = ' + JSON.stringify(allArguments));
+                // console.log('  allAssertions = ' + JSON.stringify(allAssertions));
+                // console.log('  allArguments = ' + JSON.stringify(allArguments));
                 callback({
                   assertions: allAssertions,
                   arguments: allArguments
@@ -868,7 +868,7 @@ module.exports = function (environment, pg) {
           // (1) search through the text of propositions
           fetchResultsForProposition(query, formattedQuery,
           function (propositionResults) {
-            console.log('propositionResults = ' + JSON.stringify(propositionResults));
+            // console.log('propositionResults = ' + JSON.stringify(propositionResults));
             allResultIDs = allResultIDs.concat(propositionResults.arguments);
             allResultIDs = allResultIDs.concat(propositionResults.assertions);
             // (2) search for claims made by authors
@@ -895,8 +895,8 @@ module.exports = function (environment, pg) {
                       allArguments = [];
                   function doOneResult () {
                     var result = allResultIDs.pop();
-                    console.log('allResultIDs = ' + JSON.stringify(allResultIDs));
-                    console.log('result = ' + JSON.stringify(result));
+                    // console.log('allResultIDs = ' + JSON.stringify(allResultIDs));
+                    // console.log('result = ' + JSON.stringify(result));
                     if (result && result.id) {
                       // todo: refactor to use non-child id's?
                       fetchFullClaimByChildID(query, result.id, function (results) {
@@ -922,7 +922,7 @@ module.exports = function (environment, pg) {
           });
         } else {
           // advanced search
-          console.log('advanced search');
+          // console.log('advanced search');
           logAllQueries = false;
           var curGroup = 1,
               curGroupPrefix = function () { return 'g' + curGroup; },
@@ -962,9 +962,9 @@ module.exports = function (environment, pg) {
                       return Array.from(resultsFor[id]); }
                     else { return []; }}
                   function putResultsFor (id, results) {
-                    console.log('  id = ' + JSON.stringify(id));
+                    // console.log('  id = ' + JSON.stringify(id));
                     (new Set(results)).forEach( function (value) {
-                      console.log('    ' + value);
+                      // console.log('    ' + value);
 
                     });
                     resultsFor[id] = new Set(results); }
@@ -1025,7 +1025,7 @@ module.exports = function (environment, pg) {
                     resultsForGroup[curGroup] = resultsFor[last];
                     textForGroup[curGroup] = createQuerySummaryString(
                         queriesToString, groupAsLogicString);
-                    console.log('  resultsFor = ' + JSON.stringify(resultsFor));
+                    // console.log('  resultsFor = ' + JSON.stringify(resultsFor));
                     doneWithThisGroup();
                   });
 
@@ -1090,8 +1090,8 @@ module.exports = function (environment, pg) {
               searchText += lineBreak + '<u>All Groups</u>' +
                   lineReturn + groupSearchText + lineBreak;
 
-              console.log('  resultsForGroup = ' + JSON.stringify(resultsForGroup));
-              console.log('  results = ' + JSON.stringify(Array.from(results)));
+              // console.log('  resultsForGroup = ' + JSON.stringify(resultsForGroup));
+              // console.log('  results = ' + JSON.stringify(Array.from(results)));
 
               var resultIDs = Array.from(results),
                   allAssertions = [],
@@ -1107,8 +1107,8 @@ module.exports = function (environment, pg) {
                 }
                 else {
 
-                  console.log('allAssertions = ' + JSON.stringify(allAssertions));
-                  console.log('allArguments = ' + JSON.stringify(allArguments));
+                  // console.log('allAssertions = ' + JSON.stringify(allAssertions));
+                  // console.log('allArguments = ' + JSON.stringify(allArguments));
 
                   // done with all groups
                   done();
@@ -1488,25 +1488,25 @@ module.exports = function (environment, pg) {
               if (isNaN(pageLow) || isNaN(pageHigh)) {
                 confirmation = false; }}
 
-            console.log(' ');
-            console.log('groupLocations = ' + JSON.stringify(groupLocations));
-            console.log('groupPropQueries = ' + JSON.stringify(groupPropQueries));
-            console.log('groupSolvedIDs = ' + JSON.stringify(groupSolvedIDs));
-            console.log('groupLogicalRequirements = ' + 
-                JSON.stringify(groupLogicalRequirements));
-            console.log('groupLogicalDependencies = ' + 
-                JSON.stringify(groupLogicalDependencies));
-            console.log('citationID = ' + JSON.stringify(citationID));
-            console.log('authors = ' + JSON.stringify(authors));
-            console.log('editors = ' + JSON.stringify(editors));
-            console.log('title = ' + JSON.stringify(title));
-            console.log('publisher = ' + JSON.stringify(publisher));
-            console.log('year = ' + JSON.stringify(year));
-            console.log('volume = ' + JSON.stringify(volume));
-            console.log('sourceType = ' + JSON.stringify(sourceType));
-            console.log('pageLow = ' + JSON.stringify(pageLow));
-            console.log('pageHigh = ' + JSON.stringify(pageHigh));
-            console.log(' ');
+            // console.log(' ');
+            // console.log('groupLocations = ' + JSON.stringify(groupLocations));
+            // console.log('groupPropQueries = ' + JSON.stringify(groupPropQueries));
+            // console.log('groupSolvedIDs = ' + JSON.stringify(groupSolvedIDs));
+            // console.log('groupLogicalRequirements = ' + 
+            //     JSON.stringify(groupLogicalRequirements));
+            // console.log('groupLogicalDependencies = ' + 
+            //     JSON.stringify(groupLogicalDependencies));
+            // console.log('citationID = ' + JSON.stringify(citationID));
+            // console.log('authors = ' + JSON.stringify(authors));
+            // console.log('editors = ' + JSON.stringify(editors));
+            // console.log('title = ' + JSON.stringify(title));
+            // console.log('publisher = ' + JSON.stringify(publisher));
+            // console.log('year = ' + JSON.stringify(year));
+            // console.log('volume = ' + JSON.stringify(volume));
+            // console.log('sourceType = ' + JSON.stringify(sourceType));
+            // console.log('pageLow = ' + JSON.stringify(pageLow));
+            // console.log('pageHigh = ' + JSON.stringify(pageHigh));
+            // console.log(' ');
 
             if (!confirmation) {
 
@@ -1589,8 +1589,8 @@ module.exports = function (environment, pg) {
 
                   doPeopleList(authors, function (authorsListID) {
                     doPeopleList(editors, function (editorsListID) {
-                      console.log('authorsListID = ' + JSON.stringify(authorsListID));
-                      console.log('editorsListID = ' + JSON.stringify(editorsListID));
+                      // console.log('authorsListID = ' + JSON.stringify(authorsListID));
+                      // console.log('editorsListID = ' + JSON.stringify(editorsListID));
 
                       function getOrInsertSource (callback) {
                         getOrInsert('select * from source s where s.type = $1 ' +
@@ -1615,13 +1615,13 @@ module.exports = function (environment, pg) {
                           else { callback(sourceID); }}); }
 
                       getOrInsertSource( function (sourceID) {
-                        console.log('sourceID = ' + JSON.stringify(sourceID));
+                        // console.log('sourceID = ' + JSON.stringify(sourceID));
 
                         getOrInsert('select * from publisher p where p.name = $1',
                             [publisher], 'insert into publisher values (default, ' +
                             '$1, default, $2, \'now\') returning id', [publisher,
                             userID], function (publisherID) {
-                          console.log('publisherID = ' + JSON.stringify(publisherID));
+                          // console.log('publisherID = ' + JSON.stringify(publisherID));
 
                           getOrInsert('select * from work w where w.source = $1 ' +
                               'and w.publisher = $2 and w.year = $3', [sourceID,
@@ -1629,7 +1629,7 @@ module.exports = function (environment, pg) {
                               'default, $1, $2, $3, $4, $5, \'now\') ' +
                               'returning id', [authorsListID, year, sourceID,
                               publisherID, userID], function (workID) {
-                            console.log('workID = ' + JSON.stringify(workID));
+                            // console.log('workID = ' + JSON.stringify(workID));
 
                             getOrInsert('select * from citation c where c.work ' +
                                 '= $1 and c.page_range_low = $2 and ' +
@@ -1652,7 +1652,7 @@ module.exports = function (environment, pg) {
               }
 
               getOrInsertCitation( function () {
-                console.log('citationID = ' + JSON.stringify(citationID));
+                // console.log('citationID = ' + JSON.stringify(citationID));
 
                 function newListOfMetadataTags (metadataCallback) {
                   query('insert into list_of_metadata_tags values (default) ' +
@@ -1666,7 +1666,7 @@ module.exports = function (environment, pg) {
                   var group = groups.pop(),
                       lastAssertable = undefined;
                   if (group != undefined) {
-                    console.log('group = ' + JSON.stringify(group));
+                    // console.log('group = ' + JSON.stringify(group));
                     var assertables = groupSolvedIDs[group],
                         assertableToDBID = {},
                         propQueries = groupPropQueries[group],
@@ -1677,7 +1677,7 @@ module.exports = function (environment, pg) {
                       var assertable = assertables.pop();
                       if (assertable != undefined) {
                         lastAssertable = assertable;
-                        console.log('assertable = ' + JSON.stringify(assertable));
+                        // console.log('assertable = ' + JSON.stringify(assertable));
                         if (assertable in propQueries) {
                           var propText = propQueries[assertable];
                           getOrInsert('select distinct * from proposition p ' +
@@ -1760,7 +1760,7 @@ module.exports = function (environment, pg) {
                         }
                       }
                       else {
-                        console.log('assertableToDBID = ' + JSON.stringify(assertableToDBID));
+                        // console.log('assertableToDBID = ' + JSON.stringify(assertableToDBID));
                         var location = groupLocations[group],
                             lastAssertableID = assertableToDBID[lastAssertable];
                         if (location == 1) {

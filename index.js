@@ -143,6 +143,9 @@ app.get('/search', function (request, response) {
       text: dbResults.text }); }); });
 
 app.get('/contribute', function (request, response) {
+  console.log('user ' + getUserID(request) + ', with user agent ' +
+      request.headers['user-agent'] + ', just navigated to url ' +
+      request.protocol + '://' + request.get('host') + request.originalUrl);
   if (canContribute(request)) {
     var queryObj = request.query;
     database.contribute(queryObj, getUserID(request), function (results) {
