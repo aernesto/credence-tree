@@ -51,6 +51,7 @@ var md = function (filename) {
 // include other Credence Tree files
 
 var database = require('./psql/queries')(environment, pg);
+var database2 = require('./psql/queries-2')(environment, pg);
 
 // define custom helper functions
 
@@ -101,6 +102,14 @@ function getUserID (request) {
   else { return undefined; }}
 
 // set-up routing and app logic
+
+// FOR TESTING NEW DB LAYER
+app.get('/fetchAssertable', function (request, response) {
+  database2.fetchAssertable(request.query['id'], function (result) {
+    response.json(result); }); });
+app.get('/fetchClaim', function (request, response) {
+  database2.fetchClaim(request.query['id'], function (result) {
+    response.json(result); }); });
 
 app.get('/', function (request, response) {
   response.render('pages/home', {

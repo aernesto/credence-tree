@@ -204,7 +204,8 @@ create table claim (
   id serial primary key,
   type integer not null references claim_type,
   citation integer not null references citation,
-  strength_rating integer not null references strength_rating,
+  -- strength_rating integer not null references strength_rating,
+  -- TODO: make a list of strength ratings tied to specific users (?)
   visible_in_search_results boolean not null,
   contributor integer not null references ct_user,
   contribution_time timestamp not null);
