@@ -1,4 +1,6 @@
 
+// constants (as defined in the database schema)
+
 const // assertable types
       UNARY = 1,
       BINARY = 2,
@@ -20,25 +22,40 @@ const // assertable types
         4: 'if and only if',
         5: 'is identical to'};
 
+
+
+// helper functions
+
 function noResults (results) {
   return (results == undefined) || (results.length == 0);
 }
 
+function extractData (list, attributeName) {
+  var resultList = [];
+  while (!noResults(list)) {
+    resultList.push(list.pop()[attributeName]);
+  }
+  return resultList;
+}
+
+function extractIDs (list) {
+  return extractData(list, 'id');
+}
+
+
+
+// fetch functions (retrieve records by their id's)
+
 function _fetchList (query, listTableName, listItemName, listID, callback) {
 
-  query('select * from ' + listTableName + ' where list = $1',
+  query('select distinct * from ' + listTableName + ' where list = $1',
       [listID], function (listResults) {
 
     if (noResults(listResults)) {
       callback(undefined);
     } else {
 
-      var listlistResultIDs = [];
-      while (!noResults(listResults)) {
-        listlistResultIDs.push(listResults.pop()[listItemName]);
-      }
-
-      callback(listlistResultIDs);
+      callback(extractData(listResults, listItemName));
     }
   });
 }
@@ -84,7 +101,7 @@ function fetchListOfThings (query, fetchFunction, listOfIDs, callback) {
 
 function fetchAssertable (query, assertableID, callback) {
 
-  query('select * from assertable a where a.id = $1',
+  query('select distinct * from assertable a where a.id = $1',
       [assertableID], function (assertableResults) {
 
     if (noResults(assertableResults)) {
@@ -97,7 +114,7 @@ function fetchAssertable (query, assertableID, callback) {
 
       if (assertableType == PROPOSITION) {
 
-        query('select * from proposition p where p.id = $1',
+        query('select distinct * from proposition p where p.id = $1',
             [assertableID], function (propositionResults) {
 
           if (noResults(propositionResults)) {
@@ -114,7 +131,7 @@ function fetchAssertable (query, assertableID, callback) {
 
       } else if (assertableType == UNARY) {
 
-        query('select * from unary_assertable u where u.id = $1',
+        query('select distinct * from unary_assertable u where u.id = $1',
             [assertableID], function (unaryResults) {
 
           if (noResults(unaryResults)) {
@@ -136,7 +153,7 @@ function fetchAssertable (query, assertableID, callback) {
 
       } else if (assertableType == BINARY) {
 
-        query('select * from binary_assertable b where b.id = $1',
+        query('select distinct * from binary_assertable b where b.id = $1',
             [assertableID], function (binaryResults) {
 
           if (noResults(binaryResults)) {
@@ -177,7 +194,7 @@ function fetchCitation (query, claimID, callback) {
 
 function fetchClaim (query, claimID, callback) {
 
-  query('select * from claim c where c.id = $1',
+  query('select distinct * from claim c where c.id = $1',
       [claimID], function (claimResults) {
 
     if (noResults(claimResults)) {
@@ -196,7 +213,7 @@ function fetchClaim (query, claimID, callback) {
 
         if (claimType == ASSERTION) {
 
-          query('select * from assertion a where a.id = $1',
+          query('select distinct * from assertion a where a.id = $1',
               [claimID], function (assertionResults) {
 
             if (noResults(assertionResults)) {
@@ -217,7 +234,7 @@ function fetchClaim (query, claimID, callback) {
 
         } else if (claimType == ARGUMENT) {
 
-          query('select * from argument a where a.id = $1',
+          query('select distinct * from argument a where a.id = $1',
               [claimID], function (argumentResults) {
 
             if (noResults(argumentResults)) {
@@ -253,7 +270,31 @@ function fetchClaim (query, claimID, callback) {
   });
 }
 
+
+
+// search functions (retrieve records by their similarity to given data)
+
+function searchProposition (query, searchString, callback) {
+
+  query('select distinct * from proposition p where p.proposition_tsv @@ ' +
+      'to_tsquery(\'english\', $1)', [searchString], function (results) {
+
+    if (noResults(results)) {
+      callback(undefined);
+    } else {
+
+      fetchListOfThings(query, fetchAssertable, extractIDs(results), callback);
+    }
+  });
+}
+
+
+
+// set-up the database interface
+
 module.exports = function (environment, pg) {
+
+  // streamline the process of connecting to the database
 
   var logAllQueries = true;
 
@@ -289,6 +330,8 @@ module.exports = function (environment, pg) {
     });
   }
 
+  // controller: view-to-model communication
+
   return {
 
     fetchAssertable: function (assertableID, callback) {
@@ -309,6 +352,14 @@ module.exports = function (environment, pg) {
       });
     },
 
-  };
+    searchProposition: function (searchString, callback) {
+      connectToDatabase( function (query, done) {
+        searchProposition(query, searchString, function (results) {
+          done();
+          callback(results);
+        });
+      });
+    },
 
+  };
 }
