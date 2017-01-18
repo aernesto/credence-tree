@@ -167,6 +167,7 @@ create table assertable (
     id integer primary key references assertable,
     type integer not null references unary_type,
     assertable integer not null references assertable,
+    dependencies integer [] not null, -- references assertable
     unique (type, assertable));
 
   create table binary_assertable (
@@ -174,6 +175,8 @@ create table assertable (
     type integer not null references binary_type,
     assertable1 integer not null references assertable,
     assertable2 integer not null references assertable,
+    dependencies1 integer [] not null, -- references assertable
+    dependencies2 integer [] not null, -- references assertable
     unique (type, assertable1, assertable2));
 
   create table proposition (
@@ -182,11 +185,12 @@ create table assertable (
     proposition_tsv tsvector not null,
     metadata_tags integer not null references list_of_metadata_tags);
 
-  create table attribution (
-    id integer primary key references assertable,
-    authors integer not null references list_of_people,
-    assertable integer not null references assertable,
-    unique (authors, assertable));
+  -- create table attribution (
+  --   id integer primary key references assertable,
+  --   authors integer not null references list_of_people,
+  --   assertable integer not null references assertable,
+  --   dependencies integer [] not null, -- references assertable
+  --   unique (authors, assertable));
 
 create table list_of_assertables (
   id serial primary key);

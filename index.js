@@ -113,6 +113,9 @@ app.get('/fetchClaim', function (request, response) {
 app.get('/searchProposition', function (request, response) {
   database2.searchProposition(request.query['query'], function (result) {
     response.json(result); }); });
+app.get('/searchAssertable', function (request, response) {
+  database2.searchAssertable(request.query['query'], function (result) {
+    response.json(result); }); });
 
 app.get('/', function (request, response) {
   response.render('pages/home', {
@@ -238,6 +241,19 @@ app.get('/join', function (request, response) {
 
 var port = app.get('port');
 app.listen(port, function () {
+
+  var test1 = {"implies":[{"proposition":"thing"},undefined]};
+  database2.searchAssertable(test1, function (results1) {
+    console.log('results1 = ' + results1);
+
+    var test2 = {"not":undefined};
+    database2.searchAssertable(test2, function (results2) {
+      console.log('results2 = ' + results2);
+    });
+
+  });
+  
   console.log('Credence Tree is now running on port ' + port + '.'); });
 
 // done
+

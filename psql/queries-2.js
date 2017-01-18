@@ -14,13 +14,24 @@ const // assertable types
         2: 'not',
         3: 'possibly',
         4: 'necessarily'},
+      unaryWordToType = {
+        'not': 2,
+        'possibly': 3,
+        'necessarily': 4},
       // binary types
+      IMPLICATION = 3,
       binaryTypeToWord = {
         1: 'and',
         2: 'or',
         3: 'implies',
         4: 'if and only if',
-        5: 'is identical to'};
+        5: 'is identical to'},
+      binaryWordToType = {
+        'and': 1,
+        'or': 2,
+        'implies': 3,
+        'if and only if': 4,
+        'is identical to': 5};
 
 
 
@@ -40,6 +51,20 @@ function extractData (list, attributeName) {
 
 function extractIDs (list) {
   return extractData(list, 'id');
+}
+
+// like PSQL's plainto_tsquery() but with ORs instead of ANDs
+function addOrs (queryText) {
+  if (queryText == undefined) {
+    return undefined;
+  } else {
+    return queryText.trim().replace(/\s/g, ' | ');
+  }
+}
+
+// simple <element in array> operator
+function inArr (array, element) {
+  return array.indexOf(element) != -1;
 }
 
 
@@ -276,16 +301,142 @@ function fetchClaim (query, claimID, callback) {
 
 function searchProposition (query, searchString, callback) {
 
-  query('select distinct * from proposition p where p.proposition_tsv @@ ' +
-      'to_tsquery(\'english\', $1)', [searchString], function (results) {
+  query('select distinct * from proposition p where ' +
+      'p.proposition_tsv @@ to_tsquery(\'english\', $1)',
+      [addOrs(searchString)], function (results) {
 
     if (noResults(results)) {
       callback(undefined);
     } else {
 
-      fetchListOfThings(query, fetchAssertable, extractIDs(results), callback);
+      // fetchListOfThings(query, fetchAssertable, extractIDs(results), callback);
+      callback(extractIDs(results));
     }
   });
+}
+
+function searchAssertable (query, assertableJSON, callback) {
+
+  if (noResults(assertableJSON)) {
+    callback(undefined);
+  } else {
+
+    if ('proposition' in assertableJSON) {
+      searchProposition(query, assertableJSON.proposition, callback);
+
+    } else {
+
+      var foundSomething = false;
+
+      for (var word in unaryWordToType) {
+        if (word in assertableJSON && !foundSomething) {
+          foundSomething = true;
+
+          var type = unaryWordToType[word],
+              json = assertableJSON[word];
+
+          searchAssertable(query, json, function (results1) {
+                
+            var queryText = 'select distinct * ' +
+                'from unary_assertable u where ',
+                params = [];
+            if (!noResults(results1)) {
+              params.push(results1);
+              queryText += '$' + params.length +
+                  ' && u.dependencies and ';
+            }
+            params.push(type);
+            queryText += '$' + params.length + ' = u.type';
+          
+            query(queryText, params, function (results2) {
+
+              if (noResults(results2)) {
+                callback(undefined);
+              } else {
+                
+                callback(extractIDs(results2));
+              }
+            });
+          });
+        }
+      }
+
+      for (var word in binaryWordToType) {
+        if (word in assertableJSON && !foundSomething) {
+          foundSomething = true;
+
+          var type = binaryWordToType[word],
+              jsonList = assertableJSON[word];
+
+          if (jsonList.length != 2) {
+            callback(undefined);
+          } else {
+
+            searchAssertable(query, jsonList[0], function (results1) {
+              searchAssertable(query, jsonList[1], function (results2) {
+
+                var list1 = [], list2 = [];
+
+                if (!noResults(results1)) {
+                  for (var i = 0; i < results1.length; i++) {
+                    var element = results1[i];
+                    if (!inArr(list1, element)) {
+                      list1.push(element);
+                    }
+                    if (type != IMPLICATION && !inArr(list2, element)) {
+                      list2.push(element);
+                    }
+                  }
+                }
+
+                if (!noResults(results2)) {
+                  for (var i = 0; i < results2.length; i++) {
+                    var element = results2[i];
+                    if (!inArr(list2, element)) {
+                      list2.push(element);
+                    }
+                    if (type != IMPLICATION && !inArr(list1, element)) {
+                      list1.push(element);
+                    }
+                  }
+                }
+              
+                var queryText = 'select distinct * ' +
+                    'from binary_assertable b where ',
+                    params = [];
+                if (!noResults(list1)) {
+                  params.push(list1);
+                  queryText += '$' + params.length +
+                      ' && b.dependencies1 and ';
+                }
+                if (!noResults(list2)) {
+                  params.push(list2);
+                  queryText += '$' + params.length +
+                      ' && b.dependencies2 and ';
+                }
+                params.push(type);
+                queryText += '$' + params.length + ' = b.type';
+
+                query(queryText, params, function (results3) {
+
+                  if (noResults(results3)) {
+                    callback(undefined);
+                  } else {
+                    
+                    callback(extractIDs(results3));
+                  }
+                });
+              });
+            });
+          }
+        }
+      }
+
+      if (!foundSomething) {
+        callback(undefined);
+      }
+    }
+  }
 }
 
 
@@ -355,6 +506,15 @@ module.exports = function (environment, pg) {
     searchProposition: function (searchString, callback) {
       connectToDatabase( function (query, done) {
         searchProposition(query, searchString, function (results) {
+          done();
+          callback(results);
+        });
+      });
+    },
+
+    searchAssertable: function (assertableJSON, callback) {
+      connectToDatabase( function (query, done) {
+        searchAssertable(query, assertableJSON, function (results) {
           done();
           callback(results);
         });
