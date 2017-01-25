@@ -31,7 +31,17 @@ const // assertable types
         'or': 2,
         'implies': 3,
         'if and only if': 4,
-        'is identical to': 5};
+        'is identical to': 5},
+      // html form elements
+      OPEN_PAREN = 1,
+      CLOSE_PAREN = 1,
+      unaryFormOps = [2, 3, 4],
+      binaryFormOps = [5, 6, 7, 8, 9],
+      unaryFormToJsonType = {2: 2, 3: 4, 4: 3},
+      binaryFormToJsonType = {5: 1, 6: 2, 7: 3, 8: 4, 9: 5},
+      contentGroupLocations = [1, 2, 3],
+      citationGroupLocations = [4, 5, 6, 7],
+      fullCitationGroupLocations = [8];
 
 
 
@@ -441,6 +451,295 @@ function searchAssertable (query, assertableJSON, callback) {
 
 
 
+// translation functions
+
+const EXPECTING = 1,
+      SOMETHING = 2;
+
+// this function operates like a Finite State Machine when parsing the input
+//   form data. there are additional operations occurring in this function,
+//   obviously, especially with regard to opening and closing parenthesis and
+//   keeping track of the translated input throughout the parse, etc, however
+//   such book-keeping is relativity straightforward compared to the FSM
+// defections:
+//   states:
+//     E = expecting additional input
+//     S = something already parsed
+//     ? = error (ie, terminate)
+//   transitions:
+//     R = row / proposition
+//     U = unary operator
+//     B = binary operator
+//     ( = open parenthesis
+//     ) = close parenthesis
+// state transition matrix:
+//     E S
+//   R S ?
+//   U E ?
+//   B ? E
+//   ( E ?
+//   ) ? S
+
+function htmlFormToJson (queryObject, callback) {
+
+  if (noResults(queryObject)) {
+    callback(undefined);
+  } else {
+
+    var keys = Object.keys(queryObject),
+        errorMessages = [],
+        json = {};
+
+    // handle one group at a time
+
+    var curGroup = 0;
+    function curGroupPrefix () {
+      return 'g' + curGroup;
+    }
+
+    while (true) {
+
+      curGroup++;
+
+      var curGroupKeys = [];
+      keys.forEach( function (key) {
+        if (inArr(key, curGroupPrefix())) {
+          curGroupKeys.push(key);
+        }
+      });
+
+      if (curGroupKeys.length > 0) {
+
+        var groupTypeKey = curGroupPrefix() + 'in',
+            groupType = parseInt(queryObject[groupTypeKey]);
+
+        if (groupType == undefined || isNaN(groupType)) {
+
+          errorMessages.push('ERROR: Group ' + curGroup + ': You have ' +
+              'not specified a location for this group.');
+
+        } else if (inArr(contentGroupLocations, groupType)) {
+
+          // see FSM comment above
+          var state = EXPECTING,
+              curGroupIsValid = true,
+              curGroupJson = undefined,
+              curGroupJsonStack = [],
+              curRowOperators = [],
+              curRowOperatorsStack = [];
+
+          // handle one row in this group at a time
+
+          var curRow = 0;
+          function curRowPrefix () {
+            return curGroupPrefix() + 'r' + curRow;
+          }
+
+          while (true) {
+
+            curRow++;
+
+            var curRowKeys = [];
+            keys.forEach( function (key) {
+              if (inArr(key, curRowPrefix())) {
+                curRowKeys.push(key);
+              }
+            });
+
+            if (curRowKeys.length > 0) {
+
+              // handle one before in this row at a time
+
+              var curBefore = 0;
+              function curBeforePrefix () {
+                return curRowPrefix() + 'b' + curBefore;
+              }
+
+              while (true) {
+
+                curBefore++;
+
+                if (inArr(keys, curBeforePrefix())) {
+
+                  var before = parseInt(queryObject[curBeforePrefix()]);
+                  
+                  if (before == OPEN_PAREN) {
+
+                    if (state == EXPECTING) {
+
+                      curGroupJsonStack.push(curGroupJson);
+                      curGroupJson = undefined;
+
+                      curRowOperatorsStack.push(curRowOperators);
+                      curRowOperators = [];
+
+                    } else { // state == SOMETHING
+
+                      errorMessages.push('ERROR: Group ' + curGroup +
+                          ': Row ' + curRow + ': Unexpectedly ' +
+                          'encountered an open parenthesis.');
+                      curGroupIsValid = false;
+                      break;
+                    }
+
+                  } else if (inArr(unaryFormOps, before)) {
+
+                    var word = unaryTypeToWord[unaryFormToJsonType[before]];
+
+                    if (state == EXPECTING) {
+
+                      curRowOperators.push(['unary', word]);
+
+                    } else { // state == SOMETHING
+
+                      errorMessages.push('ERROR: Group ' + curGroup +
+                          ': Row ' + curRow + ': Unexpectedly encountered ' +
+                          'the unary operator "' + word + '".');
+                      curGroupIsValid = false;
+                      break;
+                    }
+
+                  } else if (inArr(binaryFormOps, before)) {
+
+                    var word = binaryTypeToWord[binaryFormToJsonType[before]];
+
+                    if (state == SOMETHING) {
+
+                      state = EXPECTING;
+                      curRowOperators.push(['binary', word]);
+
+                    } else { // state == EXPECTING
+
+                      errorMessages.push('ERROR: Group ' + curGroup +
+                          ': Row ' + curRow + ': Unexpectedly encountered ' +
+                          'the binary operator "' + word + '".');
+                      curGroupIsValid = false;
+                      break;
+                    }
+                  }
+
+                } else { // done with all befores in this row
+                  break;
+                }
+              }
+
+              if (!curGroupIsValid) {
+                break;
+              }
+
+              // handle the row itself
+
+              var curRowJson = inArr(keys, curRowPrefix()) ? {
+                    'proposition': queryObject[curRowPrefix()]
+                  } : undefined;
+
+              function handleAllPrevOperators () {
+
+                while (curRowOperators.length > 0) {
+
+                  var curRowOperator = curRowOperators.pop();
+
+                  if (curRowOperator[0] == 'unary') {
+
+                    var newRowJson = {};
+                    newRowJson[curRowOperator[1]] = curRowJson;
+                    curRowJson = newRowJson;
+
+                  } else { // curRowOperator[0] == 'binary'
+
+                    var newRowJson = {};
+                    newRowJson[curRowOperator[1]] = [curGroupJson, curRowJson];
+                    curRowJson = newRowJson;
+                  }
+                }
+
+              }
+
+              if (state == EXPECTING) {
+
+                state = SOMETHING;
+
+                handleAllPrevOperators();
+                curGroupJson = curRowJson;
+
+              } else { // state == SOMETHING
+
+                errorMessages.push('ERROR: Group ' + curGroup + ': Row ' +
+                    curRow + ': Unexpectedly encountered this proposition.');
+                break;
+              }
+
+              // handle one after in this row at a time
+
+              var curAfter = 0;
+              function curAfterPrefix () {
+                return curRowPrefix() + 'a' + curAfter;
+              }
+
+              while (true) {
+
+                curAfter++;
+
+                if (inArr(keys, curAfterPrefix())) {
+
+                  var after = parseInt(queryObject[curAfterPrefix()]);
+                  
+                  if (after == CLOSE_PAREN) {
+
+                    if (state == SOMETHING &&
+                        curGroupJsonStack.length > 0 &&
+                        curRowOperatorsStack.length > 0) {
+
+                      curRowJson = curGroupJson;
+                      curGroupJson = curGroupJsonStack.pop();
+                      curRowOperators = curRowOperatorsStack.pop();
+
+                      handleAllPrevOperators();
+                      curGroupJson = curRowJson;
+
+                    } else {
+
+                      errorMessages.push('ERROR: Group ' + curGroup +
+                          ': Row ' + curRow + ': Unexpectedly ' +
+                          'encountered a close parenthesis.');
+                      curGroupIsValid = false;
+                      break;
+                    }
+                  }
+
+                } else { // done with all afters in this row
+                  break;
+                }
+              }
+
+              if (!curGroupIsValid) {
+                break;
+              }
+
+            } else { // done with all rows in this group
+              break;
+            }
+          }
+
+          json = curGroupJson; // TODO: parse locations
+
+        } else {
+          // TODO: citation group
+        }
+
+      } else { // done with all groups
+        break;
+      }
+    }
+
+    callback(json, errorMessages, curGroup - 1);
+  }
+}
+// TODO: if insertion (as opposed to search) throw error
+//   if there are any undefined values in the json object
+
+
+
 // set-up the database interface
 
 module.exports = function (environment, pg) {
@@ -517,6 +816,19 @@ module.exports = function (environment, pg) {
         searchAssertable(query, assertableJSON, function (results) {
           done();
           callback(results);
+        });
+      });
+    },
+
+    parseForm: function (htmlForm, callback) {
+      connectToDatabase( function (query, done) {
+        htmlFormToJson(htmlForm, function (json, errorMessages, numGroups) {
+          done();
+          callback({
+            'json': json,
+            'errorMessages': errorMessages,
+            'numGroups': numGroups
+          });
         });
       });
     },
