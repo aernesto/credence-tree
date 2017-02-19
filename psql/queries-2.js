@@ -458,10 +458,10 @@ const EXPECTING = 1,
 
 // this function operates like a Finite State Machine when parsing the input
 //   form data. there are additional operations occurring in this function,
-//   obviously, especially with regard to opening and closing parenthesis and
-//   keeping track of the translated input throughout the parse, etc, however
-//   such book-keeping is relativity straightforward compared to the FSM
-// defections:
+//   obviously, especially with regard to keeping track of the result of the
+//   translation throughout the parse, etc, however such book-keeping is
+//   relativity straightforward compared to the FSM, explained herein
+// definitions:
 //   states:
 //     E = expecting additional input
 //     S = something already parsed
@@ -520,7 +520,7 @@ function htmlFormToJson (queryObject, callback) {
 
         } else if (inArr(contentGroupLocations, groupType)) {
 
-          // see FSM comment above
+          // see FSM explanation above
           var state = EXPECTING,
               curGroupIsValid = true,
               curGroupJson = undefined,
@@ -721,7 +721,58 @@ function htmlFormToJson (queryObject, callback) {
             }
           }
 
-          json = curGroupJson; // TODO: parse locations
+          // handle group location and connective
+
+          var curGroupIn = curGroupPrefix() + 'in',
+              curGroupAnd = curGroupPrefix() + 'and',
+              groupLocation = parseInt(queryObject[curGroupIn]),
+              groupConnective = parseInt(queryObject[curGroupAnd]);
+
+          var locationWrapper = '';
+          if (groupLocation == 1) {
+            locationWrapper = 'assertion';
+          } else if (groupLocation == 2) {
+            locationWrapper = 'premise';
+          } else if (groupLocation == 3) {
+            locationWrapper = 'conclusion';
+          } else {
+            errorMessages.push('ERROR: Group ' + curGroup +
+                ': No group location specified.');
+            curGroupIsValid = false;
+          }
+
+          var newJson = {};
+          newJson[locationWrapper] = curGroupJson;
+          curGroupJson = newJson;
+
+          var connectiveWrapper = '';
+          if (groupConnective == 1 || groupConnective == 4) {
+            connectiveWrapper = 'group and';
+          } else if (groupConnective == 2 || groupConnective == 5) {
+            connectiveWrapper = 'group or';
+          } else if (groupConnective == 3 || groupConnective == 6) {
+            connectiveWrapper = 'group not';
+          }
+
+          if (connectiveWrapper == '') {
+            if (isNaN(groupConnective) && curGroup == 1) {
+              // this is fine (group 1 does not have a connective)
+            } else {
+              errorMessages.push('ERROR: Group ' + curGroup +
+                  ': No group connective specified.');
+              curGroupIsValid = false;
+            }
+          } else {
+            var newJson = {};
+            newJson[connectiveWrapper] = [json, curGroupJson];
+            curGroupJson = newJson;
+          }
+
+          // add this group's json to the running total
+
+          if (curGroupIsValid) {
+            json = curGroupJson;
+          }
 
         } else {
           // TODO: citation group

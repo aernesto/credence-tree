@@ -106,19 +106,19 @@ function getUserID (request) {
 // FOR TESTING NEW DB LAYER
 app.get('/fetchAssertable', function (request, response) {
   database2.fetchAssertable(request.query['id'], function (result) {
-    response.json(result); }); });
+    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 app.get('/fetchClaim', function (request, response) {
   database2.fetchClaim(request.query['id'], function (result) {
-    response.json(result); }); });
+    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 app.get('/searchProposition', function (request, response) {
   database2.searchProposition(request.query['query'], function (result) {
-    response.json(result); }); });
+    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 app.get('/searchAssertable', function (request, response) {
   database2.searchAssertable(request.query['query'], function (result) {
-    response.json(result); }); });
+    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 app.get('/parseForm', function (request, response) {
   database2.parseForm(request.query, function (result) {
-    response.json(result); }); });
+    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 
 app.get('/', function (request, response) {
   response.render('pages/home', {
