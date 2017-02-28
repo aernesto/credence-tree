@@ -514,13 +514,12 @@ function htmlFormToJson (queryObject, callback) {
             curGroupIsValid = true,
             groupLocationKey = curGroupPrefix() + 'in',
             groupLocation = parseInt(queryObject[groupLocationKey]),
+            groupLocationIsValid = true,
             groupLocationWrapper = '';
 
         if (groupLocation == undefined || isNaN(groupLocation)) {
 
-          errorMessages.push('ERROR: Group ' + curGroup + ': You have ' +
-              'not specified a location for this group.');
-          curGroupIsValid = false;
+          groupLocationIsValid = false;
 
         } else if (inArr(contentGroupLocations, groupLocation)) {
 
@@ -735,6 +734,8 @@ function htmlFormToJson (queryObject, callback) {
 
           groupLocationWrapper = 'basic citation';
 
+          // handle the one-off information
+
           var citationType = '';
           if (groupLocation == 4) {
             citationType = 'anywhere';
@@ -749,7 +750,14 @@ function htmlFormToJson (queryObject, callback) {
           var newJson = {},
               citationKey = curGroupPrefix() + 'r1';
           if (inArr(keys, citationKey)) {
-            newJson[citationType] = queryObject[citationKey];
+            var value = queryObject[citationKey];
+            if (value != '') {
+              newJson[citationType] = value;
+            } else {
+              errorMessages.push('ERROR: Group ' + curGroup +
+                  ': This basic citation group is empty.');
+              curGroupIsValid = false;
+            }
           } else {
             newJson = undefined;
           }
@@ -759,15 +767,103 @@ function htmlFormToJson (queryObject, callback) {
         } else if (inArr(fullCitationGroupLocations, groupLocation)) {
 
           groupLocationWrapper = 'full citation';
-          // TODO
+          curGroupJson = {};
+
+          // handle all the people
+
+          var key = '',
+              value = '',
+              personID = 0;
+
+          while (true) {
+
+            personID++;
+
+            var foundSomething = false;
+
+            function doOnePerson (htmlKeyString, jsonString1, jsonString2) {
+              var key = curGroupPrefix() + htmlKeyString + 'n' + personID;
+              if (inArr(keys, key)) {
+                value = queryObject[key];
+                if (value != '') {
+                  key = jsonString1 + ' ' + personID + ' ' + jsonString2;
+                  curGroupJson[key] = value;
+                }
+                foundSomething = true;
+              }
+            }
+
+            doOnePerson('ag', 'author', 'given name');
+            doOnePerson('as', 'author', 'surname');
+            doOnePerson('eg', 'editor', 'given name');
+            doOnePerson('es', 'editor', 'surname');
+
+            if (!foundSomething) {
+              break;
+            }
+
+          }
+
+          // handle the one-off information
+
+          function doOneKey (htmlKey, jsonKey) {
+
+            if (jsonKey == undefined) {
+              jsonKey = htmlKey;
+            }
+
+            key = curGroupPrefix() + htmlKey;
+            if (inArr(keys, key)) {
+              value = queryObject[key];
+              if (value != '') {
+                curGroupJson[jsonKey] = value;
+              }
+            }
+
+          }
+
+          doOneKey('title');
+          doOneKey('publisher');
+          doOneKey('year');
+          doOneKey('volume');
+
+          key = curGroupPrefix() + 'source';
+          var missingCitationSource = false;
+          if (inArr(keys, key)) {
+
+            var citationSourceString = '',
+                citationSourceInt = parseInt(queryObject[key]);
+            if (citationSourceInt == 1) {
+              citationSourceString = 'monograph';
+            } else if (citationSourceInt == 2) {
+              citationSourceString = 'edited collection';
+            } else if (citationSourceInt == 3) {
+              citationSourceString = 'periodical';
+            } else {
+              missingCitationSource = true;
+            }
+
+            curGroupJson['source type'] = citationSourceString;
+
+          } else {
+            missingCitationSource = true;
+          }
+
+          if (missingCitationSource) {
+            errorMessages.push('ERROR: Group ' + curGroup +
+                ': No full citation type was specified.');
+            curGroupIsValid = false;
+          }
 
         } else {
-          // TODO
+
+          groupLocationIsValid = false;
+
         }
 
         // handle the group location
 
-        if (groupLocationWrapper == '') {
+        if (!groupLocationIsValid || groupLocationWrapper == '') {
           errorMessages.push('ERROR: Group ' + curGroup +
               ': No group location specified.');
           curGroupIsValid = false;
