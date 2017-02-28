@@ -510,19 +510,20 @@ function htmlFormToJson (queryObject, callback) {
 
       if (curGroupKeys.length > 0) {
 
-        var groupTypeKey = curGroupPrefix() + 'in',
-            groupType = parseInt(queryObject[groupTypeKey]);
+        var curGroupIsValid = true,
+            groupLocationKey = curGroupPrefix() + 'in',
+            groupLocation = parseInt(queryObject[groupLocationKey]);
 
-        if (groupType == undefined || isNaN(groupType)) {
+        if (groupLocation == undefined || isNaN(groupLocation)) {
 
           errorMessages.push('ERROR: Group ' + curGroup + ': You have ' +
               'not specified a location for this group.');
+          curGroupIsValid = false;
 
-        } else if (inArr(contentGroupLocations, groupType)) {
+        } else if (inArr(contentGroupLocations, groupLocation)) {
 
           // see FSM explanation above
           var state = EXPECTING,
-              curGroupIsValid = true,
               curGroupJson = undefined,
               curGroupJsonStack = [],
               curRowOperators = [],
@@ -721,12 +722,7 @@ function htmlFormToJson (queryObject, callback) {
             }
           }
 
-          // handle group location and connective
-
-          var curGroupIn = curGroupPrefix() + 'in',
-              curGroupAnd = curGroupPrefix() + 'and',
-              groupLocation = parseInt(queryObject[curGroupIn]),
-              groupConnective = parseInt(queryObject[curGroupAnd]);
+          // handle the group location
 
           var locationWrapper = '';
           if (groupLocation == 1) {
@@ -745,37 +741,42 @@ function htmlFormToJson (queryObject, callback) {
           newJson[locationWrapper] = curGroupJson;
           curGroupJson = newJson;
 
-          var connectiveWrapper = '';
-          if (groupConnective == 1 || groupConnective == 4) {
-            connectiveWrapper = 'group and';
-          } else if (groupConnective == 2 || groupConnective == 5) {
-            connectiveWrapper = 'group or';
-          } else if (groupConnective == 3 || groupConnective == 6) {
-            connectiveWrapper = 'group not';
-          }
-
-          if (connectiveWrapper == '') {
-            if (isNaN(groupConnective) && curGroup == 1) {
-              // this is fine (group 1 does not have a connective)
-            } else {
-              errorMessages.push('ERROR: Group ' + curGroup +
-                  ': No group connective specified.');
-              curGroupIsValid = false;
-            }
-          } else {
-            var newJson = {};
-            newJson[connectiveWrapper] = [json, curGroupJson];
-            curGroupJson = newJson;
-          }
-
-          // add this group's json to the running total
-
-          if (curGroupIsValid) {
-            json = curGroupJson;
-          }
-
         } else {
           // TODO: citation group
+        }
+
+        // handle the group connective
+
+        var curGroupAnd = curGroupPrefix() + 'and',
+            groupConnective = parseInt(queryObject[curGroupAnd]);
+
+        var connectiveWrapper = '';
+        if (groupConnective == 1 || groupConnective == 4) {
+          connectiveWrapper = 'group and';
+        } else if (groupConnective == 2 || groupConnective == 5) {
+          connectiveWrapper = 'group or';
+        } else if (groupConnective == 3 || groupConnective == 6) {
+          connectiveWrapper = 'group not';
+        }
+
+        if (connectiveWrapper == '') {
+          if (isNaN(groupConnective) && curGroup == 1) {
+            // this is fine (group 1 does not have a connective)
+          } else {
+            errorMessages.push('ERROR: Group ' + curGroup +
+                ': No group connective specified.');
+            curGroupIsValid = false;
+          }
+        } else {
+          var newJson = {};
+          newJson[connectiveWrapper] = [json, curGroupJson];
+          curGroupJson = newJson;
+        }
+
+        // lastly, add this group's json to the running total
+
+        if (curGroupIsValid) {
+          json = curGroupJson;
         }
 
       } else { // done with all groups
