@@ -40,7 +40,7 @@ const // assertable types
       unaryFormToJsonType = {2: 2, 3: 4, 4: 3},
       binaryFormToJsonType = {5: 1, 6: 2, 7: 3, 8: 4, 9: 5},
       contentGroupLocations = [1, 2, 3],
-      citationGroupLocations = [4, 5, 6, 7],
+      basicCitationGroupLocations = [4, 5, 6, 7],
       fullCitationGroupLocations = [8];
 
 
@@ -510,9 +510,11 @@ function htmlFormToJson (queryObject, callback) {
 
       if (curGroupKeys.length > 0) {
 
-        var curGroupIsValid = true,
+        var curGroupJson = undefined,
+            curGroupIsValid = true,
             groupLocationKey = curGroupPrefix() + 'in',
-            groupLocation = parseInt(queryObject[groupLocationKey]);
+            groupLocation = parseInt(queryObject[groupLocationKey]),
+            groupLocationWrapper = '';
 
         if (groupLocation == undefined || isNaN(groupLocation)) {
 
@@ -522,9 +524,16 @@ function htmlFormToJson (queryObject, callback) {
 
         } else if (inArr(contentGroupLocations, groupLocation)) {
 
+          if (groupLocation == 1) {
+            groupLocationWrapper = 'assertion';
+          } else if (groupLocation == 2) {
+            groupLocationWrapper = 'premise';
+          } else if (groupLocation == 3) {
+            groupLocationWrapper = 'conclusion';
+          }
+
           // see FSM explanation above
           var state = EXPECTING,
-              curGroupJson = undefined,
               curGroupJsonStack = [],
               curRowOperators = [],
               curRowOperatorsStack = [];
@@ -722,28 +731,51 @@ function htmlFormToJson (queryObject, callback) {
             }
           }
 
-          // handle the group location
+        } else if (inArr(basicCitationGroupLocations, groupLocation)) {
 
-          var locationWrapper = '';
-          if (groupLocation == 1) {
-            locationWrapper = 'assertion';
-          } else if (groupLocation == 2) {
-            locationWrapper = 'premise';
-          } else if (groupLocation == 3) {
-            locationWrapper = 'conclusion';
-          } else {
-            errorMessages.push('ERROR: Group ' + curGroup +
-                ': No group location specified.');
-            curGroupIsValid = false;
+          groupLocationWrapper = 'basic citation';
+
+          var citationType = '';
+          if (groupLocation == 4) {
+            citationType = 'anywhere';
+          } else if (groupLocation == 5) {
+            citationType = 'author';
+          } else if (groupLocation == 6) {
+            citationType = 'title';
+          } else if (groupLocation == 7) {
+            citationType = 'year';
           }
 
-          var newJson = {};
-          newJson[locationWrapper] = curGroupJson;
+          var newJson = {},
+              citationKey = curGroupPrefix() + 'r1';
+          if (inArr(keys, citationKey)) {
+            newJson[citationType] = queryObject[citationKey];
+          } else {
+            newJson = undefined;
+          }
+
           curGroupJson = newJson;
 
+        } else if (inArr(fullCitationGroupLocations, groupLocation)) {
+
+          groupLocationWrapper = 'full citation';
+          // TODO
+
         } else {
-          // TODO: citation group
+          // TODO
         }
+
+        // handle the group location
+
+        if (groupLocationWrapper == '') {
+          errorMessages.push('ERROR: Group ' + curGroup +
+              ': No group location specified.');
+          curGroupIsValid = false;
+        }
+
+        var newJson = {};
+        newJson[groupLocationWrapper] = curGroupJson;
+        curGroupJson = newJson;
 
         // handle the group connective
 
