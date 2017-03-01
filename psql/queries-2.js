@@ -136,16 +136,41 @@ function fetchListOfThings (query, fetchFunction, listOfIDs, callback) {
   }
 }
 
-function fetchTitle (query, sourceID, callback) {
+function _fetchSimple (query, thingID, callback,
+    tableName, itemName, nameColumn) {
 
-  query('select distinct * from source s where s.id = $1',
-      [sourceID], function (sourceResults) {
+  query('select distinct * from '+tableName+' '+itemName+' where '+
+      itemName+'.id = $1', [thingID], function (results) {
 
-    if (noResults(sourceResults)) {
+    if (noResults(results)) {
       callback(undefined);
     } else {
 
-      callback(sourceResults[0]['title']);
+      callback(results[0][nameColumn]);
+    }
+  });
+}
+
+function fetchTitle (query, titleID, callback) {
+  _fetchSimple(query, titleID, callback, 'source', 's', 'title');
+}
+
+function fetchPublisher (query, publisherID, callback) {
+  _fetchSimple(query, publisherID, callback, 'publisher', 'p', 'name');
+}
+
+function fetchPerson (query, personID, callback) {
+  // TODO: refactor with _fetchSimple() ?
+
+  query('select distinct * from person p where '+
+      'p.id = $1', [personID], function (results) {
+
+    if (noResults(results)) {
+      callback(undefined);
+    } else {
+
+      var result = results[0];
+      callback(result['surname'] + ', ' + result['given_name_s']);
     }
   });
 }
@@ -341,25 +366,6 @@ function searchProposition (query, searchString, callback) {
   });
 }
 
-// accepts string of an author's first name, returns a list of ids
-// TODO
-
-// accepts string of a title, returns a list of ids
-function searchTitle (query, searchString, callback) {
-
-  query('select distinct * from source s where ' +
-      's.title_tsv @@ to_tsquery(\'english\', $1)',
-      [addOrs(searchString)], function (results) {
-
-    if (noResults(results)) {
-      callback(undefined);
-    } else {
-
-      callback(extractIDs(results));
-    }
-  });
-}
-
 // accepts json of an assertable, returns a list of ids
 function searchAssertable (query, assertableJSON, callback) {
 
@@ -485,88 +491,222 @@ function searchAssertable (query, assertableJSON, callback) {
   }
 }
 
+
+
+// search similar exact functions (retrieve records by (1) their
+// similarity to and (2) their exact matching with given data)
+
+// returns two id lists (similar and exact)
+function _searchSimilarExact (query, searchString, callback,
+    tableName, itemName, tsvColumn, nameColumn) {
+
+  query('select distinct * from '+tableName+' '+itemName+' where ' +
+      itemName+'.'+tsvColumn+' @@ to_tsquery(\'english\', $1)',
+      [addOrs(searchString)], function (similarResults) {
+
+    var returnSimilarResults;
+    if (noResults(similarResults)) {
+      returnSimilarResults = undefined;
+    } else {
+      returnSimilarResults = extractIDs(similarResults);
+    }
+
+    query('select distinct * from '+tableName+' '+itemName+
+        ' where '+itemName+'.'+nameColumn+' = $1',
+        [searchString], function (exactResults) {
+
+      var returnExactResults;
+      if (noResults(exactResults)) {
+        returnExactResults = undefined;
+      } else {
+        returnExactResults = extractIDs(exactResults);
+      }
+
+      callback(returnSimilarResults, returnExactResults);
+    });
+  });
+}
+
+// accepts string of a proposition, returns two id lists (similar and exact)
+function searchPropositionSimilarExact (query, searchArguments, callback) {
+  // TODO: refactor with searchProposition() ?
+  if (searchArguments.length != 1) {
+    callback(undefined, undefined);
+  } else {
+    _searchSimilarExact(query, searchArguments[0], callback,
+        'proposition', 'p', 'proposition_tsv', 'proposition');
+  }
+}
+
+// accepts string of a title, returns two id lists (similar and exact)
+function searchTitleSimilarExact (query, searchArguments, callback) {
+  if (searchArguments.length != 1) {
+    callback(undefined, undefined);
+  } else {
+    _searchSimilarExact(query, searchArguments[0], callback,
+        'source', 's', 'title_tsv', 'title');
+  }
+}
+
+// accepts string of a publisher, returns two id lists (similar and exact)
+function searchPublisherSimilarExact (query, searchArguments, callback) {
+  if (searchArguments.length != 1) {
+    callback(undefined, undefined);
+  } else {
+    _searchSimilarExact(query, searchArguments[0], callback,
+        'publisher', 'p', 'name_tsv', 'name');
+  }
+}
+
+// accepts strings of a person's name, returns two id lists (similar and exact)
+function searchPersonSimilarExact (query, searchArguments, callback) {
+  // TODO: refactor with _searchSimilarExact() ?
+
+  if (searchArguments.length != 2) {
+    callback(undefined, undefined);
+  } else {
+
+    var firstName = searchArguments[0],
+        lastName = searchArguments[1];
+
+    query('select distinct * from person p where ' +
+        'p.given_name_s_tsv @@ to_tsquery(\'english\', $1) ' +
+        'or p.surname_tsv @@ to_tsquery(\'english\', $2)',
+        [addOrs(firstName), addOrs(lastName)], function (similarResults) {
+
+      var returnSimilarResults;
+      if (noResults(similarResults)) {
+        returnSimilarResults = undefined;
+      } else {
+        returnSimilarResults = extractIDs(similarResults);
+      }
+
+      query('select distinct * from person p where ' +
+          'p.given_name_s = $1 and p.surname = $2',
+          [firstName, lastName], function (exactResults) {
+
+        var returnExactResults;
+        if (noResults(exactResults)) {
+          returnExactResults = undefined;
+        } else {
+          returnExactResults = extractIDs(exactResults);
+        }
+
+        callback(returnSimilarResults, returnExactResults);
+      });
+    });
+  }
+}
+
+
+
+// search similar functions (retrieve records by their similarity 
+// to lists of given data; mainly for use during contribution)
+
 // returns list of comments on similarity of propositions in json
-function searchForSimilar (query, listOfPropositions,
-    listOfCitations, callback) {
+function searchForSimilar (query, listOfPropositions, citation, callback) {
 
   if (noResults(listOfPropositions)) {
     callback(undefined);
   } else {
 
-    var comments = [];
+    var commentsOnPropositions = [],
+        commentsOnCitationPeople = [],
+        commentsOnCitationOther = [],
+        citationKeys = Object.keys(citation);
 
     function getSimilarTo () {
 
-      if (listOfPropositions.length > 0) {
+      function searchSimple (searchFunction, fetchFunction,
+          searchArguments, typeString, whichComments) {
 
-        var propositionText = listOfPropositions.pop();
+        searchFunction(query, searchArguments,
+            function (similarIDs, exactIDs) {
 
-        searchProposition(query, propositionText, function (results1) {
+          if ((!noResults(similarIDs))&&(!noResults(exactIDs))) {
+            var exactID = exactIDs[0];
+            for (var i = 0; i < similarIDs.length; i++) {
+              if (similarIDs[i] == exactID) {
+                similarIDs.splice(i, 1);
+                break;
+              }
+            }
+          }
 
-          fetchListOfThings(query, fetchAssertable,
-              results1, function (results2) {
+          fetchListOfThings(query, fetchFunction,
+              similarIDs, function (similarResults) {
+            fetchListOfThings(query, fetchFunction,
+                exactIDs, function (exactResults) {
 
-            comments.push({
-              'type': 'proposition',
-              'quote': propositionText,
-              'similar': results2
+              whichComments.push({
+                'type': typeString,
+                'quote': searchArguments,
+                'similar': similarResults,
+                'exact': exactResults
+              });
+
+              getSimilarTo();
             });
-
-            getSimilarTo();
           });
         });
+      }
+
+      if (listOfPropositions.length > 0) {
+
+        searchSimple(searchPropositionSimilarExact, fetchAssertable,
+            [listOfPropositions.pop()], 'proposition', commentsOnPropositions);
 
       } else {
 
-        if (listOfCitations.length > 0) {
+        if (citationKeys.length > 0) {
 
-          var citation = listOfCitations.pop();
+          var key = citationKeys.pop();
 
-          if ('anywhere' in citation) {
+          if (key.includes('title')) {
 
-            // TODO
+            searchSimple(searchTitleSimilarExact, fetchTitle,
+                [citation[key]], 'title', commentsOnCitationOther);
+
+          } else if (key.includes('publisher')) {
+
+            searchSimple(searchPublisherSimilarExact, fetchPublisher,
+                [citation[key]], 'publisher', commentsOnCitationOther);
+
+          } else if (key.includes('name')) {
+
+            var firstName, lastName, otherKey;
+            if (key.includes('given ')) {
+              firstName = key;
+              lastName = key.replace('given ', 'sur');
+              otherKey = lastName;
+            } else { // key.includes('sur')
+              firstName = key.replace('sur', 'given ');
+              lastName = key;
+              otherKey = firstName;
+            }
+
+            var otherKeyIndex = citationKeys.indexOf(otherKey);
+            if (otherKeyIndex != -1) {
+              citationKeys.splice(otherKeyIndex, 1);
+            }
+
+            searchSimple(searchPersonSimilarExact, fetchPerson,
+                [citation[firstName], citation[lastName]],
+                'person', commentsOnCitationPeople);
+
+          } else { // skip this key
             getSimilarTo();
-
-          } else if ('author' in citation) {
-
-            // TODO
-            getSimilarTo();
-
-          } else if ('title' in citation) {
-
-            var title = citation['title'];
-
-            searchTitle(query, title, function (results1) {
-
-              fetchListOfThings(query, fetchTitle,
-                  results1, function (results2) {
-
-                comments.push({
-                  'type': 'title',
-                  'quote': title,
-                  'similar': results2
-                });
-
-                getSimilarTo();
-              });
-            });
-
-          } else {
-
-            // TODO
-            getSimilarTo();
-
           }
 
-        } else {
-
-          comments.reverse();
-          callback(comments);
+        } else { // done!
+          commentsOnPropositions.reverse();
+          callback(commentsOnPropositions.concat(
+              commentsOnCitationOther, commentsOnCitationPeople));
         }
       }
     }
 
-    getSimilarTo();
+    getSimilarTo(); // start the process
   }
 }
 
@@ -610,7 +750,7 @@ function htmlFormToJson (queryObject, callback) {
     var keys = Object.keys(queryObject),
         errorMessages = [],
         listOfPropositions = [],
-        listOfCitations = [],
+        listOfFullCitations = [],
         json = {};
 
     // handle one group at a time
@@ -889,7 +1029,6 @@ function htmlFormToJson (queryObject, callback) {
           }
 
           curGroupJson = newJson;
-          listOfCitations.push(curGroupJson);
 
         } else if (inArr(fullCitationGroupLocations, groupLocation)) {
 
@@ -982,7 +1121,7 @@ function htmlFormToJson (queryObject, callback) {
             curGroupIsValid = false;
           }
 
-          listOfCitations.push(curGroupJson);
+          listOfFullCitations.push(curGroupJson);
 
         } else {
 
@@ -1041,7 +1180,7 @@ function htmlFormToJson (queryObject, callback) {
       }
     }
 
-    callback(json, errorMessages, listOfPropositions, listOfCitations);
+    callback(json, errorMessages, listOfPropositions, listOfFullCitations);
   }
 }
 // TODO: if insertion (as opposed to search) throw if
@@ -1132,13 +1271,13 @@ module.exports = function (environment, pg) {
     parseForm: function (htmlForm, callback) {
       connectToDatabase( function (query, done) {
         htmlFormToJson(htmlForm, function (json,
-            errorMessages, listOfPropositions, listOfCitations) {
+            errorMessages, listOfPropositions, listOfFullCitations) {
           done();
           callback({
             'json': json,
             'errorMessages': errorMessages,
             'listOfPropositions': listOfPropositions,
-            'listOfCitations': listOfCitations,
+            'listOfFullCitations': listOfFullCitations,
           });
         });
       });
@@ -1149,16 +1288,24 @@ module.exports = function (environment, pg) {
     contribute: function (htmlForm, callback) {
       connectToDatabase( function (query, done) {
         htmlFormToJson(htmlForm, function (json,
-            errorMessages, listOfPropositions, listOfCitations) {
+            errorMessages, listOfPropositions, listOfFullCitations) {
           if (errorMessages.length > 0) {
             done();
             callback({
               'json': json,
               'errorMessages': errorMessages,
             });
+          } else if (listOfFullCitations.length != 1) {
+            done();
+            errorMessages.push('ERROR: You must have exactly one ' +
+                'full citation when contributing new content.');
+            callback({
+              'json': json,
+              'errorMessages': errorMessages,
+            });
           } else {
             searchForSimilar(query, listOfPropositions,
-                listOfCitations, function (comments) {
+                listOfFullCitations[0], function (comments) {
               done();
               callback({
                 'comments': comments
