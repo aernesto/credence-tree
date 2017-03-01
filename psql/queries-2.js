@@ -136,6 +136,20 @@ function fetchListOfThings (query, fetchFunction, listOfIDs, callback) {
   }
 }
 
+function fetchTitle (query, sourceID, callback) {
+
+  query('select distinct * from source s where s.id = $1',
+      [sourceID], function (sourceResults) {
+
+    if (noResults(sourceResults)) {
+      callback(undefined);
+    } else {
+
+      callback(sourceResults[0]['title']);
+    }
+  });
+}
+
 function fetchAssertable (query, assertableID, callback) {
 
   query('select distinct * from assertable a where a.id = $1',
@@ -311,6 +325,7 @@ function fetchClaim (query, claimID, callback) {
 
 // search functions (retrieve records by their similarity to given data)
 
+// accepts string of a proposition, returns a list of ids
 function searchProposition (query, searchString, callback) {
 
   query('select distinct * from proposition p where ' +
@@ -321,7 +336,25 @@ function searchProposition (query, searchString, callback) {
       callback(undefined);
     } else {
 
-      // fetchListOfThings(query, fetchAssertable, extractIDs(results), callback);
+      callback(extractIDs(results));
+    }
+  });
+}
+
+// accepts string of an author's first name, returns a list of ids
+// TODO
+
+// accepts string of a title, returns a list of ids
+function searchTitle (query, searchString, callback) {
+
+  query('select distinct * from source s where ' +
+      's.title_tsv @@ to_tsquery(\'english\', $1)',
+      [addOrs(searchString)], function (results) {
+
+    if (noResults(results)) {
+      callback(undefined);
+    } else {
+
       callback(extractIDs(results));
     }
   });
@@ -453,7 +486,8 @@ function searchAssertable (query, assertableJSON, callback) {
 }
 
 // returns list of comments on similarity of propositions in json
-function searchForSimilar (query, listOfPropositions, callback) {
+function searchForSimilar (query, listOfPropositions,
+    listOfCitations, callback) {
 
   if (noResults(listOfPropositions)) {
     callback(undefined);
@@ -484,8 +518,51 @@ function searchForSimilar (query, listOfPropositions, callback) {
 
       } else {
 
-        comments.reverse();
-        callback(comments);
+        if (listOfCitations.length > 0) {
+
+          var citation = listOfCitations.pop();
+
+          if ('anywhere' in citation) {
+
+            // TODO
+            getSimilarTo();
+
+          } else if ('author' in citation) {
+
+            // TODO
+            getSimilarTo();
+
+          } else if ('title' in citation) {
+
+            var title = citation['title'];
+
+            searchTitle(query, title, function (results1) {
+
+              fetchListOfThings(query, fetchTitle,
+                  results1, function (results2) {
+
+                comments.push({
+                  'type': 'title',
+                  'quote': title,
+                  'similar': results2
+                });
+
+                getSimilarTo();
+              });
+            });
+
+          } else {
+
+            // TODO
+            getSimilarTo();
+
+          }
+
+        } else {
+
+          comments.reverse();
+          callback(comments);
+        }
       }
     }
 
@@ -533,6 +610,7 @@ function htmlFormToJson (queryObject, callback) {
     var keys = Object.keys(queryObject),
         errorMessages = [],
         listOfPropositions = [],
+        listOfCitations = [],
         json = {};
 
     // handle one group at a time
@@ -811,6 +889,7 @@ function htmlFormToJson (queryObject, callback) {
           }
 
           curGroupJson = newJson;
+          listOfCitations.push(curGroupJson);
 
         } else if (inArr(fullCitationGroupLocations, groupLocation)) {
 
@@ -903,6 +982,8 @@ function htmlFormToJson (queryObject, callback) {
             curGroupIsValid = false;
           }
 
+          listOfCitations.push(curGroupJson);
+
         } else {
 
           groupLocationIsValid = false;
@@ -960,7 +1041,7 @@ function htmlFormToJson (queryObject, callback) {
       }
     }
 
-    callback(json, errorMessages, listOfPropositions);
+    callback(json, errorMessages, listOfPropositions, listOfCitations);
   }
 }
 // TODO: if insertion (as opposed to search) throw if
@@ -1051,12 +1132,13 @@ module.exports = function (environment, pg) {
     parseForm: function (htmlForm, callback) {
       connectToDatabase( function (query, done) {
         htmlFormToJson(htmlForm, function (json,
-            errorMessages, listOfPropositions) {
+            errorMessages, listOfPropositions, listOfCitations) {
           done();
           callback({
             'json': json,
             'errorMessages': errorMessages,
             'listOfPropositions': listOfPropositions,
+            'listOfCitations': listOfCitations,
           });
         });
       });
@@ -1067,7 +1149,7 @@ module.exports = function (environment, pg) {
     contribute: function (htmlForm, callback) {
       connectToDatabase( function (query, done) {
         htmlFormToJson(htmlForm, function (json,
-            errorMessages, listOfPropositions) {
+            errorMessages, listOfPropositions, listOfCitations) {
           if (errorMessages.length > 0) {
             done();
             callback({
@@ -1075,7 +1157,8 @@ module.exports = function (environment, pg) {
               'errorMessages': errorMessages,
             });
           } else {
-            searchForSimilar(query, listOfPropositions, function (comments) {
+            searchForSimilar(query, listOfPropositions,
+                listOfCitations, function (comments) {
               done();
               callback({
                 'comments': comments
