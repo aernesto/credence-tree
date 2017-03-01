@@ -43,6 +43,8 @@ const // assertable types
       basicCitationGroupLocations = [4, 5, 6, 7],
       fullCitationGroupLocations = [8];
 
+// TODO: export phrases like 'group and' to separate api syntax file
+
 
 
 // helper functions
@@ -325,6 +327,7 @@ function searchProposition (query, searchString, callback) {
   });
 }
 
+// accepts json of an assertable, returns a list of ids
 function searchAssertable (query, assertableJSON, callback) {
 
   if (noResults(assertableJSON)) {
@@ -449,6 +452,47 @@ function searchAssertable (query, assertableJSON, callback) {
   }
 }
 
+// returns list of comments on similarity of propositions in json
+function searchForSimilar (query, listOfPropositions, callback) {
+
+  if (noResults(listOfPropositions)) {
+    callback(undefined);
+  } else {
+
+    var comments = [];
+
+    function getSimilarTo () {
+
+      if (listOfPropositions.length > 0) {
+
+        var propositionText = listOfPropositions.pop();
+
+        searchProposition(query, propositionText, function (results1) {
+
+          fetchListOfThings(query, fetchAssertable,
+              results1, function (results2) {
+
+            comments.push({
+              'type': 'proposition',
+              'quote': propositionText,
+              'similar': results2
+            });
+
+            getSimilarTo();
+          });
+        });
+
+      } else {
+
+        comments.reverse();
+        callback(comments);
+      }
+    }
+
+    getSimilarTo();
+  }
+}
+
 
 
 // translation functions
@@ -488,6 +532,7 @@ function htmlFormToJson (queryObject, callback) {
 
     var keys = Object.keys(queryObject),
         errorMessages = [],
+        listOfPropositions = [],
         json = {};
 
     // handle one group at a time
@@ -638,9 +683,12 @@ function htmlFormToJson (queryObject, callback) {
 
               // handle the row itself
 
-              var curRowJson = inArr(keys, curRowPrefix()) ? {
-                    'proposition': queryObject[curRowPrefix()]
-                  } : undefined;
+              var curRowJson = undefined;
+              if (inArr(keys, curRowPrefix())) {
+                var newProposition = queryObject[curRowPrefix()];
+                listOfPropositions.push(newProposition);
+                curRowJson = {'proposition': newProposition};
+              }
 
               function handleAllPrevOperators () {
 
@@ -912,11 +960,11 @@ function htmlFormToJson (queryObject, callback) {
       }
     }
 
-    callback(json, errorMessages, curGroup - 1);
+    callback(json, errorMessages, listOfPropositions);
   }
 }
-// TODO: if insertion (as opposed to search) throw error
-//   if there are any undefined values in the json object
+// TODO: if insertion (as opposed to search) throw if
+//   error there are any undefined values in the json object
 
 
 
@@ -1002,13 +1050,38 @@ module.exports = function (environment, pg) {
 
     parseForm: function (htmlForm, callback) {
       connectToDatabase( function (query, done) {
-        htmlFormToJson(htmlForm, function (json, errorMessages, numGroups) {
+        htmlFormToJson(htmlForm, function (json,
+            errorMessages, listOfPropositions) {
           done();
           callback({
             'json': json,
             'errorMessages': errorMessages,
-            'numGroups': numGroups
+            'listOfPropositions': listOfPropositions,
           });
+        });
+      });
+    },
+
+    // real functions (public api)
+
+    contribute: function (htmlForm, callback) {
+      connectToDatabase( function (query, done) {
+        htmlFormToJson(htmlForm, function (json,
+            errorMessages, listOfPropositions) {
+          if (errorMessages.length > 0) {
+            done();
+            callback({
+              'json': json,
+              'errorMessages': errorMessages,
+            });
+          } else {
+            searchForSimilar(query, listOfPropositions, function (comments) {
+              done();
+              callback({
+                'comments': comments
+              });
+            });
+          }
         });
       });
     },
