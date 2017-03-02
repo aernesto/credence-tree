@@ -1232,6 +1232,8 @@ module.exports = function (environment, pg) {
 
   return {
 
+    // TODO: remove before going live
+
     fetchAssertable: function (assertableID, callback) {
       connectToDatabase( function (query, done) {
         fetchAssertable(query, assertableID, function (results) {
@@ -1285,7 +1287,7 @@ module.exports = function (environment, pg) {
 
     // real functions (public api)
 
-    contribute: function (htmlForm, callback) {
+    contribute: function (htmlForm, userID, callback) {
       connectToDatabase( function (query, done) {
         htmlFormToJson(htmlForm, function (json,
             errorMessages, listOfPropositions, listOfFullCitations) {
@@ -1308,13 +1310,90 @@ module.exports = function (environment, pg) {
                 listOfFullCitations[0], function (comments) {
               done();
               callback({
-                'comments': comments
+                'json': json,
+                'errorMessages': errorMessages,
+                'comments': comments,
               });
+              // TODO: validation and insertion
             });
           }
         });
       });
     },
+
+    search: function (queryObj, callback) {
+      // TODO
+      callback(undefined);
+    },
+
+    // old functions (from first database version)
+    // TODO later: refactor this (and the index file)
+
+    getUserSpecializations: function (userType, callback) {
+      connectToDatabase( function (query, done) { query('\
+        select distinct s.id, s.specialization \
+        from user_specialization s \
+        where s.parent = $1', [userType],
+        function (results) {
+          done(); callback(results); }); }); },
+
+    userIdToUser: function (userID, callback) {
+      connectToDatabase( function (query, done) { query('\
+        select distinct * from ct_user u \
+        where u.id = $1', [userID],
+        function (results) {
+          done();
+          if (results.length == 0) {
+            callback(undefined); }
+          else {
+            callback(results[0]); }}); }); },
+
+    // TODO: refactor userIdToUser() and googleIdToUser()
+    googleIdToUser: function (googleID, callback) {
+      connectToDatabase( function (query, done) { query('\
+        select distinct * from ct_user u \
+        where u.google_id = $1', [googleID],
+        function (results) {
+          done();
+          if (results.length == 0) {
+            callback(undefined); }
+          else {
+            callback(results[0]); }}); }); },
+
+    // right now the default is to allow all new users to contribute
+    // TODO: change to "false, false, true" after alpha phase is done
+    makeNewUser: function (google_id, legal_notice, surname, given_name_s,
+        user_type, department, institution, academic_email_address,
+        preferred_email_address, privacy_setting, contact_rate, 
+        specializations, callback) {
+      if (legal_notice == 'accept' && surname && given_name_s && 
+          ((user_type == 2 && department && institution && 
+          academic_email_address) || (user_type == 1)) && 
+          preferred_email_address && privacy_setting && contact_rate) {
+        connectToDatabase( function (query, done) { query('\
+          insert into list_of_specializations \
+          values (default) returning id', [],
+          function (results) {
+            var specializationID = results[0].id; query('\
+            insert into ct_user values \
+            (default, $1, $2, $3, $4, $5, $6, $7, $8, true, false, true) \
+            returning id', [google_id, user_type, surname, given_name_s, 
+            preferred_email_address, specializationID, 
+            privacy_setting, contact_rate],
+            function (results) {
+              var userID = results[0].id;
+              function returnUserID () {
+                done(); callback(userID); }
+              if (user_type == 1) { query('\
+                insert into ct_member \
+                values ($1) returning id',
+                [userID], returnUserID); }
+              else if (user_type == 2) { query('\
+                insert into ct_philosopher \
+                values ($1, $2, $3, $4) returning id',
+                [userID, academic_email_address, department, 
+                institution], returnUserID); }}); }); }); }
+      else { callback(false); }},
 
   };
 }

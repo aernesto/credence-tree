@@ -51,7 +51,6 @@ var md = function (filename) {
 // include other Credence Tree files
 
 var database = require('./psql/queries')(environment, pg);
-var database2 = require('./psql/queries-2')(environment, pg);
 
 // define custom helper functions
 
@@ -105,22 +104,22 @@ function getUserID (request) {
 
 // FOR TESTING NEW DB LAYER
 app.get('/fetchAssertable', function (request, response) {
-  database2.fetchAssertable(request.query['id'], function (result) {
+  database.fetchAssertable(request.query['id'], function (result) {
     response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 app.get('/fetchClaim', function (request, response) {
-  database2.fetchClaim(request.query['id'], function (result) {
+  database.fetchClaim(request.query['id'], function (result) {
     response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 app.get('/searchProposition', function (request, response) {
-  database2.searchProposition(request.query['query'], function (result) {
+  database.searchProposition(request.query['query'], function (result) {
     response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 app.get('/searchAssertable', function (request, response) {
-  database2.searchAssertable(request.query['query'], function (result) {
+  database.searchAssertable(request.query['query'], function (result) {
     response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 app.get('/parseForm', function (request, response) {
-  database2.parseForm(request.query, function (result) {
+  database.parseForm(request.query, function (result) {
     response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 app.get('/contribute2', function (request, response) {
-  database2.contribute(request.query, function (result) {
+  database.contribute(request.query, function (result) {
     response.write(JSON.stringify(result, null, 5)); response.end(); }); });
 
 app.get('/', function (request, response) {
@@ -249,11 +248,11 @@ var port = app.get('port');
 app.listen(port, function () {
 
   var test1 = {"implies":[{"proposition":"thing"},undefined]};
-  database2.searchAssertable(test1, function (results1) {
+  database.searchAssertable(test1, function (results1) {
     console.log('results1 = ' + results1);
 
     var test2 = {"not":undefined};
-    database2.searchAssertable(test2, function (results2) {
+    database.searchAssertable(test2, function (results2) {
       console.log('results2 = ' + results2);
     });
 
