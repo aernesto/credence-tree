@@ -159,6 +159,11 @@ function fetchPublisher (query, publisherID, callback) {
   _fetchSimple(query, publisherID, callback, 'publisher', 'p', 'name');
 }
 
+function fetchProposition (query, propositionID, callback) {
+  _fetchSimple(query, propositionID, callback,
+      'proposition', 'p', 'proposition');
+}
+
 function fetchPerson (query, personID, callback) {
   // TODO: refactor with _fetchSimple() ?
 
@@ -638,11 +643,31 @@ function searchForSimilar (query, listOfPropositions, citation, callback) {
             fetchListOfThings(query, fetchFunction,
                 exactIDs, function (exactResults) {
 
+              function flattenArguments (arguments) {
+                var result = '',
+                    first = true;
+                arguments.reverse();
+                arguments.forEach( function (argument) {
+                  if (first) {
+                    first = false;
+                  } else {
+                    result += ', ';
+                  }
+                  result += argument;
+                });
+                return result;
+              }
+
+              var exactResult = undefined;
+              if (!noResults(exactResults)) {
+                exactResult = exactResults[0];
+              }
+
               whichComments.push({
                 'type': typeString,
-                'quote': searchArguments,
+                'quote': flattenArguments(searchArguments),
                 'similar': similarResults,
-                'exact': exactResults
+                'exact': exactResult
               });
 
               getSimilarTo();
@@ -653,7 +678,7 @@ function searchForSimilar (query, listOfPropositions, citation, callback) {
 
       if (listOfPropositions.length > 0) {
 
-        searchSimple(searchPropositionSimilarExact, fetchAssertable,
+        searchSimple(searchPropositionSimilarExact, fetchProposition,
             [listOfPropositions.pop()], 'proposition', commentsOnPropositions);
 
       } else {
@@ -1291,30 +1316,33 @@ module.exports = function (environment, pg) {
       connectToDatabase( function (query, done) {
         htmlFormToJson(htmlForm, function (json,
             errorMessages, listOfPropositions, listOfFullCitations) {
+
+          if (listOfFullCitations.length != 1) {
+            errorMessages.push('ERROR: You must have exactly one ' +
+                'full citation when contributing new content.');
+          }
+
+          // TODO: additional data validation
+
           if (errorMessages.length > 0) {
             done();
             callback({
               'json': json,
-              'errorMessages': errorMessages,
+              'errors': errorMessages,
             });
-          } else if (listOfFullCitations.length != 1) {
-            done();
-            errorMessages.push('ERROR: You must have exactly one ' +
-                'full citation when contributing new content.');
-            callback({
-              'json': json,
-              'errorMessages': errorMessages,
-            });
+
           } else {
             searchForSimilar(query, listOfPropositions,
                 listOfFullCitations[0], function (comments) {
               done();
               callback({
                 'json': json,
-                'errorMessages': errorMessages,
+                'errors': errorMessages,
                 'comments': comments,
               });
-              // TODO: validation and insertion
+
+              // TODO: the actual insertion process
+
             });
           }
         });

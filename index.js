@@ -105,22 +105,22 @@ function getUserID (request) {
 // FOR TESTING NEW DB LAYER
 app.get('/fetchAssertable', function (request, response) {
   database.fetchAssertable(request.query['id'], function (result) {
-    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
+    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
 app.get('/fetchClaim', function (request, response) {
   database.fetchClaim(request.query['id'], function (result) {
-    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
+    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
 app.get('/searchProposition', function (request, response) {
   database.searchProposition(request.query['query'], function (result) {
-    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
+    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
 app.get('/searchAssertable', function (request, response) {
   database.searchAssertable(request.query['query'], function (result) {
-    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
+    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
 app.get('/parseForm', function (request, response) {
   database.parseForm(request.query, function (result) {
-    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
+    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
 app.get('/contribute2', function (request, response) {
-  database.contribute(request.query, function (result) {
-    response.write(JSON.stringify(result, null, 5)); response.end(); }); });
+  database.contribute(request.query, -1, function (result) {
+    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
 
 app.get('/', function (request, response) {
   response.render('pages/home', {
@@ -173,7 +173,7 @@ app.get('/contribute', function (request, response) {
         userInfo: request.session.userInfo,
         contributionPage: true,
         query: queryObj,
-        contribResults: results }); }); }
+        databaseResults: results }); }); }
   else { // TODO: "you do not have the permissions to do x" page
     redirectTo(response, '/'); }});
 

@@ -14,94 +14,131 @@
 
 <div class='hidden' id='contribution-confirmation-area'>
 
-  <% if (typeof contribResults == 'string' && contribResults == 'success') { %>
+  <% var json = databaseResults.json,
+         errors = databaseResults.errors,
+         comments = databaseResults.comments; %>
+
+  <% if (errors != undefined && errors.length > 0 &&
+         Object.keys(query).length > 0) { %>
 
     <div class='content-panel'>
-      <br/> Success! This information has been recorded in the database.
-      <br/> <br/> Thank you for contributing to Credence Tree! <br/> <br/>
+
+      <br/> There are errors with this submission...
+
+      <% errors.forEach( function (error) { %>
+
+        <br/> <br/> <%= error %>
+
+      <% }); %>
+
+      <br/> <br/>
+
     </div>
 
-  <% } else if (Object.keys(query).length > 0) { var numCorrect = 0; %>
+  <% } else if (comments != undefined && comments.length > 0) { %>
+
+    <% var yesID = 0; %>
 
     <div class='content-panel'>
-      <br/> INFORMATION REVIEW
-      <br/> <br/> <hr/> <br/> first section... <br/> <br/>
+      <br/> Information Review <br/> <br/>
     </div>
 
-    <% for (var i = 0; i < contribResults.length; i++) { %>
+    <div class='content-panel'>
 
-      <% var results = contribResults[i]; if (typeof results == 'string') { %>
+      <br/> The following chunk of code represents what the Credence Tree
+      database sees when it looks at your contribution query. This file-format
+      is called json, and it is reasonably human-readable. Please take a moment
+      to look through the json to ensure that your query was parsed correctly,
+      paying special attention to the <i>structure</i> of the parsed query;
+      we will review the <i>content</i> momentarily.
 
-        <div class='content-panel'> <br/>
-          <% if ((results == 'CORRECT?newProp')
-              || (results == 'CORRECT?oldProp')
-              || (results == 'CORRECT?newCite')
-              || (results == 'CORRECT?oldCite')
-              || (results == 'CORRECT?no')
-              || (results == 'CORRECT?logic')) {
-            var inputName = 'yes' + (++numCorrect); %>
-            <% if (results != 'CORRECT?no') { %>
-              Are you sure that this information is exactly correct? <br/> <br/>
-              <input class='confirmation' type='radio'
-                  name='<%= inputName %>' value='1' </input>
-                  <% if (results == 'CORRECT?newProp') { %>
-                    Yes, I want to CREATE a NEW proposition.
-                  <% } else if (results == 'CORRECT?oldProp') { %>
-                    Yes, I want to REUSE the EXISTING proposition.
-                  <% } else if (results == 'CORRECT?newCite') { %>
-                    Yes, I want to CREATE a NEW citation.
-                  <% } else if (results == 'CORRECT?oldCite') { %>
-                    Yes, I want to REUSE the EXISTING citation.
-                  <% } else if (results == 'CORRECT?logic') { %>
-                    Yes, this logical interpretation is semantically correct.
-                  <% } %> <br/>
-              <input class='confirmation' type='radio'
-                  name='<%= inputName %>' value='2' </input>
-                  No, I will edit the text and re-submit the form.
-             <% } else { %>
-               <%- contribResults[++i] %>
-             <% } %> <br/> <br/> <hr/> <br/>
-            <% if ((i + 1) != contribResults.length) { %>
-              next section... <% } else { %>
-              last section... <% } %>
-          <% } else { %>
-            <%- results %>
-          <% } %> <br/> <br/>
-        </div>
+      <br/> <br/> <pre class='font-formatting'><%-
+          JSON.stringify(json, null, 4); %></pre>
 
-        <% if ((i + 1) == contribResults.length) { %>
-          <div class='content-panel'>
-            <br/> If you answered <u>yes</u> to all the above questions, and if
-            there were <u>no</u> errors, please enter the page number range for this
-            citation. (If no page numbers are available for this source, please
-            use "-1" for both fields.) Otherwise, simply leave these fields
-            blank for now, change the query text as needed, and re-submit
-            the form for a new Information Review. <br/> <br/>
-            <input class='confirmation' type='text' name='pagelow'
-                size='1'></input> citation page number lower bound <br/>
-            <input class='confirmation' type='text' name='pagehigh'
-                size='1'></input> upper bound (can be the same) <br/>
-            <!-- <select class='confirmation' name='confidence'>
-              <option value='111'> 0.01 </option>
-              <option value='11' > 0.1 </option>
-              <option value='1'  > 1 </option>
-              <option value='2'  > 2 </option>
-              <option value='3'  > 3 </option>
-              <option value='4'  > 4 </option>
-              <option value='5'  > 5 </option>
-              <option value='6'  > 6 </option>
-              <option value='7'  > 7 </option>
-              <option value='8'  > 8 </option>
-              <option value='9'  > 9 </option>
-              <option value='99' > 9.9 </option>
-              <option value='999'> 9.99 </option>
-            </select> confidence rating -->
-          <br/> </div> <% } %>
+      <br/> Does this seem correct?
+      <% var yesName = 'yes' + (++yesID); %>
+      <input class='confirmation' type='radio'
+          name='<%= yesName %>' value='1' </input> Yes
+      <input class='confirmation' type='radio'
+          name='<%= yesName %>' value='2' </input> No
 
-      <% } %>
-      
-    <% } %>
-      
+      <br/> <br/>
+
+    </div>
+
+    <% comments.forEach( function (comment) { %>
+
+      <% var type = comment.type,
+             quote = comment.quote,
+             similar = comment.similar,
+             exact = comment.exact; %>
+
+      <div class='content-panel'>
+
+        <br/> Regarding the <%= type %>
+
+        <br/> <br/> <pre><%- quote %></pre>
+
+        <% if (exact != undefined && exact.length > 0) { %>
+
+          <br/> This <i>exactly</i> matches the following entry:
+
+          <br/> <br/> <pre><%- exact %></pre>
+
+          <br/> Do you want to <i>reuse this existing entry?</i>
+
+        <% } else { %>
+
+          <br/> This does not match any existing entries.
+
+          <br/> <br/> Do you want to <i>create a new entry?</i>
+
+        <% } %>
+
+        <% var yesName = 'yes' + (++yesID); %>
+        <input class='confirmation' type='radio'
+            name='<%= yesName %>' value='1' </input> Yes
+        <input class='confirmation' type='radio'
+            name='<%= yesName %>' value='2' </input> No
+
+        <% if (similar != undefined && similar.length > 0) { %>
+
+          <br/> <br/> Please compare with the following <i>similar</i> entries:
+
+          <br/> <br/> <% similar.forEach( function (similarThing) { %>
+            <pre><%- similarThing %></pre>
+          <% }); %>
+
+        <% } else { %>
+
+          <br/>
+
+        <% } %>
+
+        <br/>
+
+      </div>
+
+    <% }); %>
+
+    <div class='content-panel'>
+
+      <br/> If you answered <u>yes</u> to all of the above questions, and if
+      there were <u>no</u> errors, and if you did <u>not</u> change any of the
+      text in the query form at the top of the page, then you are ready to
+      submit! Please enter the page number range for this citation to complete
+      your submission and hit "Submit"! (If no page numbers are available for
+      this source, please enter "-1" for both fields.) Otherwise, simply leave
+      these fields blank for now, change your query text as needed, and
+      re-submit the form to received an updated Information Review. <br/> <br/>
+
+      <input class='confirmation' type='text' name='pagelow'
+          size='1'></input> citation page number lower bound <br/>
+      <input class='confirmation' type='text' name='pagehigh'
+          size='1'></input> upper bound (can be the same) <br/> <br/>
+
+    </div>
+
   <% } %>
 
 </div>
