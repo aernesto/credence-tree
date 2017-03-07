@@ -53,6 +53,10 @@ function noResults (results) {
   return (results == undefined) || (results.length == 0);
 }
 
+function empty (result) {
+  return (result == undefined) || (result == '');
+}
+
 function extractData (list, attributeName) {
   var resultList = [];
   while (!noResults(list)) {
@@ -1141,8 +1145,6 @@ function htmlFormToJson (queryObject, callback) {
           }
 
           if (missingCitationSource) {
-            errorMessages.push('ERROR: Group ' + curGroup +
-                ': No full citation type was specified.');
             curGroupIsValid = false;
           }
 
@@ -1208,8 +1210,110 @@ function htmlFormToJson (queryObject, callback) {
     callback(json, errorMessages, listOfPropositions, listOfFullCitations);
   }
 }
-// TODO: if insertion (as opposed to search) throw if
-//   error there are any undefined values in the json object
+
+function contributionValidation (json, errors, propositions, fullCitations) {
+
+  var propositionError = false;
+  propositions.forEach( function (proposition) {
+    if ((!propositionError) && empty(proposition)) {
+      errors.push('ERROR: At least one of your propositions is empty or ' +
+          'undefined. This is now allowed when contributing new content.');
+      propositionError = true;
+    }
+  });
+
+  if (fullCitations.length != 1) {
+    errors.push('ERROR: You must have exactly one ' +
+        'full citation when contributing new content.');
+
+  } else {
+
+    var citation = fullCitations[0];
+
+    if (empty(citation['title'])) {
+      errors.push('ERROR: Citation title not specified.');
+    }
+
+    if (empty(citation['publisher'])) {
+      errors.push('ERROR: Citation publisher not specified.');
+    }
+
+    var year = citation['year'];
+    if (empty(year)) {
+      errors.push('ERROR: Citation year not specified.');
+    } else if (isNaN(parseInt(year))) {
+      errors.push('ERROR: Citation year is not an integer.');
+    }
+
+    // returns the number of people of that kind
+    function testListOfPeople (personType) {
+      var personID = 1;
+      while (true) {
+        var surname = citation[personType + ' ' + personID + ' surname'],
+            givenName = citation[personType + ' ' + personID + ' given name'],
+            surnameEmpty = empty(surname),
+            givenNameEmpty = empty(givenName);
+        if (surnameEmpty && givenNameEmpty) {
+          return personID - 1;
+        } else if (surnameEmpty && !givenNameEmpty) {
+          errors.push('ERROR: While ' + personType + ' given name ' +
+              'is optional, ' + personType + ' surname is required.');
+        }
+        personID++;
+      }
+    }
+
+    var numAuthors = testListOfPeople('author');
+    if (numAuthors == 0) {
+      errors.push('ERROR: At least one author is required.');
+    }
+
+    var citationType = citation['source type'];
+    if (empty(citationType)) {
+      errors.push('ERROR: Citation type not specified.');
+
+    } else {
+
+      if (citationType == 'periodical') {
+        var volume = citation['volume'];
+        if (empty(volume)) {
+          errors.push('ERROR: Citation volume not specified.');
+        } else if (isNaN(parseInt(volume))) {
+          errors.push('ERROR: Citation volume is not an integer.');
+        }
+
+      } else if (citationType == 'edited collection') {
+        var numEditors = testListOfPeople('editor');
+        if (numEditors == 0) {
+          errors.push('ERROR: At least one editor is required.');
+        }
+      }
+    }
+  }
+
+  var foundAnEmpty = false;
+  function findEmpties (something) {
+    if (empty(something)) {
+      foundAnEmpty = true;
+    } else if (typeof something == 'object') {
+      if (Array.isArray()) {
+        something.forEach( function (value) {
+          findEmpties(value);
+        });
+      } else {
+        Object.keys(something).forEach( function (key) {
+          findEmpties(something[key]);
+        });
+      }
+    }
+  }
+
+  findEmpties(json);
+
+  if (foundAnEmpty && !propositionError) {
+    errors.push('ERROR: Something went wrong when parsing your query.');
+  }
+}
 
 
 
@@ -1219,7 +1323,7 @@ module.exports = function (environment, pg) {
 
   // streamline the process of connecting to the database
 
-  var logAllQueries = true;
+  var logAllQueries = false;
 
   function connectToDatabase (callback) {
 
@@ -1314,15 +1418,11 @@ module.exports = function (environment, pg) {
 
     contribute: function (htmlForm, userID, callback) {
       connectToDatabase( function (query, done) {
-        htmlFormToJson(htmlForm, function (json,
-            errorMessages, listOfPropositions, listOfFullCitations) {
+        htmlFormToJson(htmlForm, function (json, errorMessages,
+            listOfPropositions, listOfFullCitations) {
 
-          if (listOfFullCitations.length != 1) {
-            errorMessages.push('ERROR: You must have exactly one ' +
-                'full citation when contributing new content.');
-          }
-
-          // TODO: additional data validation
+          contributionValidation(json, errorMessages,
+            listOfPropositions, listOfFullCitations);
 
           if (errorMessages.length > 0) {
             done();
@@ -1341,6 +1441,7 @@ module.exports = function (environment, pg) {
                 'comments': comments,
               });
 
+              // TODO: contributionConfirmation()
               // TODO: the actual insertion process
 
             });
