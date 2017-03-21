@@ -16,7 +16,8 @@
 
   <% var json = databaseResults.json,
          errors = databaseResults.errors,
-         comments = databaseResults.comments; %>
+         comments = databaseResults.comments,
+         successMessage = databaseResults.successMessage; %>
 
   <% if (errors != undefined && errors.length > 0 &&
          Object.keys(query).length > 0) { %>
@@ -45,12 +46,13 @@
 
     <div class='content-panel'>
 
-      <br/> The following chunk of code represents what the Credence Tree
-      database sees when it looks at your contribution query. This file-format
-      is called json, and it is reasonably human-readable. Please take a moment
-      to look through the json to ensure that your query was parsed correctly,
-      paying special attention to the <i>structure</i> of the parsed query;
-      we will review the <i>content</i> momentarily.
+      <br/> The following text is what the Credence Tree database sees after
+      it interprets your contribution query. This file-format is called json:
+      {braces} represent key-value pairs, [brackets] represent lists, and
+      "quotes" contain human-readable information. Please take a moment to
+      look through the json to ensure that your query was interpreted
+      correctly; please pay special attention to the <i>structure</i> of the
+      query (since we will be reviewing the <i>content</i> momentarily).
 
       <br/> <br/> <pre class='font-formatting'><%-
           JSON.stringify(json, null, 4); %></pre>
@@ -138,6 +140,12 @@
       <input class='confirmation' type='text' name='pagehigh'
           size='1'></input> upper bound (can be the same) <br/> <br/>
 
+    </div>
+
+  <% } else if (successMessage != undefined) { %>
+
+    <div class='content-panel'>
+      <br/> <%= successMessage %> <br/> <br/>
     </div>
 
   <% } %>

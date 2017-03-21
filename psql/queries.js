@@ -1211,6 +1211,9 @@ function htmlFormToJson (queryObject, callback) {
   }
 }
 
+
+// other miscellaneous validation and confirmation functions
+
 function contributionValidation (json, errors, propositions, fullCitations) {
 
   var propositionError = false;
@@ -1291,7 +1294,11 @@ function contributionValidation (json, errors, propositions, fullCitations) {
     }
   }
 
-  var foundAnEmpty = false;
+  var foundAnEmpty = false,
+      numConclusions = 0,
+      numAssertion = 0,
+      numPremises = 0;
+
   function findEmpties (something) {
     if (empty(something)) {
       foundAnEmpty = true;
@@ -1302,6 +1309,9 @@ function contributionValidation (json, errors, propositions, fullCitations) {
         });
       } else {
         Object.keys(something).forEach( function (key) {
+          if (key == 'conclusion') { numConclusions++; }
+          if (key == 'assertion') { numAssertion++; }
+          if (key == 'premise') { numPremises++; }
           findEmpties(something[key]);
         });
       }
@@ -1313,6 +1323,75 @@ function contributionValidation (json, errors, propositions, fullCitations) {
   if (foundAnEmpty && !propositionError) {
     errors.push('ERROR: Something went wrong when parsing your query.');
   }
+
+  if (numAssertion == 0) {
+    if (numConclusions != 1) {
+      errors.push('ERROR: Arguments must have exactly one conclusion.');
+    }
+  } else {
+    if (numPremises > 0 || numConclusions > 0) {
+      errors.push('ERROR: You may not submit assertions and ' +
+          'arguments at the same time.');
+    } else if (numAssertion > 1) {
+      errors.push('ERROR: You may only submit one assertion at a time.');
+    }
+  }
+}
+
+function contributionConfirmation (html, comments) {
+
+  var returnVal = {'valid': false};
+
+  if (noResults(html)) {
+    return returnVal;
+  } else {
+
+    for (var i = 1; i <= comments.length; i++) {
+      var key = 'yes' + i;
+      if (key in html) {
+        if (html[key] != '1') {
+          return returnVal;
+        }
+      } else {
+        return returnVal;
+      }
+    }
+
+    var low = 0;
+    if ('pagelow' in html) {
+      low = parseInt(html['pagelow']);
+      if (isNaN(low)) {
+        return returnVal;
+      }
+    } else {
+      return returnVal;
+    }
+
+    var high = 0;
+    if ('pagehigh' in html) {
+      high = parseInt(html['pagehigh']);
+      if (isNaN(high)) {
+        return returnVal;
+      }
+    } else {
+      return returnVal;
+    }
+
+    return {
+      'valid': true,
+      'low': low,
+      'high': high,
+    };
+  }
+}
+
+
+
+// insertion functions
+
+function insert (json, userID, pageLow, pageHigh, callback) {
+  // TODO
+  callback('this function isn\'t done yet!');
 }
 
 
@@ -1417,7 +1496,9 @@ module.exports = function (environment, pg) {
     // real functions (public api)
 
     contribute: function (htmlForm, userID, callback) {
+
       connectToDatabase( function (query, done) {
+
         htmlFormToJson(htmlForm, function (json, errorMessages,
             listOfPropositions, listOfFullCitations) {
 
@@ -1427,23 +1508,33 @@ module.exports = function (environment, pg) {
           if (errorMessages.length > 0) {
             done();
             callback({
-              'json': json,
               'errors': errorMessages,
             });
 
           } else {
+
             searchForSimilar(query, listOfPropositions,
                 listOfFullCitations[0], function (comments) {
-              done();
-              callback({
-                'json': json,
-                'errors': errorMessages,
-                'comments': comments,
-              });
 
-              // TODO: contributionConfirmation()
-              // TODO: the actual insertion process
+              var info = contributionConfirmation(htmlForm, comments);
 
+              if (info.valid == false) {
+                done();
+                callback({
+                  'json': json,
+                  'comments': comments,
+                });
+              } else {
+
+                insert(json, userID, info.low, info.high,
+                    function (successMessage) {
+
+                  done();
+                  callback({
+                    'successMessage': successMessage,
+                  });
+                });
+              }
             });
           }
         });
