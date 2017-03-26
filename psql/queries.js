@@ -1,5 +1,15 @@
 
-// constants (as defined in the database schema)
+/* helper functions for constants section */
+
+function invert (object) {
+  var inversion = {};
+  for (var key in object) {
+    inversion[object[key]] = key; }
+  return inversion; }
+
+
+
+/* constants / definitions */
 
 const // assertable types
       UNARY = 1,
@@ -14,10 +24,7 @@ const // assertable types
         2: 'not',
         3: 'possibly',
         4: 'necessarily'},
-      unaryWordToType = {
-        'not': 2,
-        'possibly': 3,
-        'necessarily': 4},
+      unaryWordToType = invert(unaryTypeToWord),
       // binary types
       IMPLICATION = 3,
       binaryTypeToWord = {
@@ -26,12 +33,7 @@ const // assertable types
         3: 'implies',
         4: 'if and only if',
         5: 'is identical to'},
-      binaryWordToType = {
-        'and': 1,
-        'or': 2,
-        'implies': 3,
-        'if and only if': 4,
-        'is identical to': 5},
+      binaryWordToType = invert(binaryTypeToWord),
       // html form elements
       OPEN_PAREN = 1,
       CLOSE_PAREN = 1,
@@ -41,13 +43,23 @@ const // assertable types
       binaryFormToJsonType = {5: 1, 6: 2, 7: 3, 8: 4, 9: 5},
       contentGroupLocations = [1, 2, 3],
       basicCitationGroupLocations = [4, 5, 6, 7],
-      fullCitationGroupLocations = [8];
+      fullCitationGroupLocations = [8],
+      // json format structure keys
+      groupConnectives = ['group and', 'group or', 'group not'],
+      groupTypes = ['assertion', 'premise', 'conclusion'];
+      unaryTypes = Object.keys(unaryWordToType),
+      binaryTypes = Object.keys(binaryWordToType),
+      propositionType = 'proposition',
+      fullCitationType = 'full citation';
 
-// TODO: export phrases like 'group and' to separate api syntax file
+// TODO: if we wanted to be really hardcore we could create a meta-database
+// format (in js) that could be just through a (js) script that compiles the
+// format definition into psql code to initialize the databases (ie, generate
+// the code that is currently housed in the schema-data.sql file, etc)
 
 
 
-// helper functions
+/* other helper functions */
 
 function noResults (results) {
   return (results == undefined) || (results.length == 0);
@@ -85,7 +97,7 @@ function inArr (array, element) {
 
 
 
-// fetch functions (retrieve records by their id's)
+/* fetch functions (retrieve records by their id's) */
 
 function _fetchList (query, listTableName, listItemName, listID, callback) {
 
@@ -357,7 +369,7 @@ function fetchClaim (query, claimID, callback) {
 
 
 
-// search functions (retrieve records by their similarity to given data)
+/* search functions (retrieve records by their similarity to given data) */
 
 // accepts string of a proposition, returns a list of ids
 function searchProposition (query, searchString, callback) {
@@ -502,8 +514,15 @@ function searchAssertable (query, assertableJSON, callback) {
 
 
 
-// search similar exact functions (retrieve records by (1) their
-// similarity to and (2) their exact matching with given data)
+/* search similar exact functions (retrieve records by (1) their
+   similarity to and (2) their exact matching with given data) */
+
+// TODO: split these up into two functions, searchSimilar() and
+// searchExact(), so that the contribution's insert() function
+// only has to call the exact version to avoid duplicated code
+
+// TODO: make the exact version of these functions return one thing
+// (instead of a list of things of exactly length one)
 
 // returns two id lists (similar and exact)
 function _searchSimilarExact (query, searchString, callback,
@@ -609,8 +628,8 @@ function searchPersonSimilarExact (query, searchArguments, callback) {
 
 
 
-// search similar functions (retrieve records by their similarity 
-// to lists of given data; mainly for use during contribution)
+/* search similar functions (retrieve records by their similarity 
+   to lists of given data; mainly for use during contribution) */
 
 // returns list of comments on similarity of propositions in json
 function searchForSimilar (query, listOfPropositions, citation, callback) {
@@ -741,7 +760,7 @@ function searchForSimilar (query, listOfPropositions, citation, callback) {
 
 
 
-// translation functions
+/* translation functions */
 
 const EXPECTING = 1,
       SOMETHING = 2;
@@ -1212,7 +1231,8 @@ function htmlFormToJson (queryObject, callback) {
 }
 
 
-// other miscellaneous validation and confirmation functions
+
+/* other miscellaneous validation and confirmation functions */
 
 function contributionValidation (json, errors, propositions, fullCitations) {
 
@@ -1387,20 +1407,161 @@ function contributionConfirmation (html, comments) {
 
 
 
-// insertion functions
+/* insertion functions
+   (note: by this point, i assume that the json IS valid) */
 
-function insert (json, userID, pageLow, pageHigh, callback) {
-  // TODO
-  callback('this function isn\'t done yet!');
+function getID (entry) {
+  return entry[0].id;
+}
+
+function newListOfMetadataTags (query, callback) {
+  query('insert into list_of_metadata_tags values (default) ' +
+      'returning id', [], function (result) {
+    callback(getID(result));
+  });
+}
+
+function newAssertable (query, type, userID, callback) {
+  query('insert into assertable values (default, $1, $2, \'now\') ' +
+      'returning id', [type, userID], function (result) {
+    callback(getID(result));
+  });
+}
+
+function insert (query, json, userID, pageLow, pageHigh, callback1) {
+
+  var citation = 0,
+      assertion = 0,
+      conclusion = 0,
+      premises = [];
+
+  function traverse (something, callback2) {
+
+    var key = Object.keys(something)[0];
+
+    if (inArr(groupConnectives, key)) {
+      console.log('groupConnective: ' + key);
+      traverse(something[key][0], function () {
+        traverse(something[key][1], function () {
+          callback2();
+        });
+      });
+
+    } else if (inArr(groupTypes, key)) {
+      console.log('groupType: ' + key);
+      traverse(something[key], function (result) {
+        if (key == 'assertion') {
+          assertion = result;
+        } else if (key == 'conclusion') {
+          conclusion = result;
+        } else if (key == 'premise') {
+          premises.push(result);
+        }
+        callback2();
+      });
+
+    } else if (inArr(unaryTypes, key)) {
+      console.log('unaryType: ' + key);
+      traverse(something[key], function (result, dependencies) {
+        var type = unaryWordToType[key];
+        query('select distinct * from unary_assertable u where ' +
+            'u.assertable = $1 and u.type = $2',
+            [result, type], function (exact) {
+          if (!noResults(exact)) {
+            var exactID = getID(exact);
+            console.log('exact: ' + exactID);
+            callback2(exactID, dependencies.concat(exactID));
+          } else {
+            newAssertable(query, 1, userID, function (assertableID) {
+              query('insert into unary_assertable values ' +
+                  '($1, $2, $3, $4) returning id',
+                  [assertableID, type, result, dependencies],
+                  function (unaryID) {
+                var newID = getID(unaryID);
+                console.log('new: ' + newID);
+                callback2(newID, dependencies.concat(newID));
+              });
+            });
+          }
+        });
+      });
+
+    } else if (inArr(binaryTypes, key)) {
+      console.log('binaryType: ' + key);
+      traverse(something[key][0], function (result1, depend1) {
+        traverse(something[key][1], function (result2, depend2) {
+          var type = binaryWordToType[key];
+          query('select distinct * from binary_assertable b where ' +
+              'b.assertable1 = $1 and b.assertable2 = $2 and b.type = $3',
+              [result1, result2, type], function (exact) {
+            if (!noResults(exact)) {
+              var exactID = getID(exact);
+              console.log('exact: ' + exactID);
+              callback2(exactID, depend1.concat(depend2).concat(exactID));
+            } else {
+              newAssertable(query, 2, userID, function (assertableID) {
+                query('insert into binary_assertable values ' +
+                    '($1, $2, $3, $4, $5, $6) returning id',
+                    [assertableID, type, result1, result2, depend1, depend2],
+                    function (binaryID) {
+                  var newID = getID(binaryID);
+                  console.log('new: ' + newID);
+                  callback2(newID, depend1.concat(depend2).concat(newID));
+                });
+              });
+            }
+          });
+        });
+      });
+
+    } else if (key == propositionType) {
+      var proposition = something[key];
+      console.log('proposition: ' + proposition);
+      query('select distinct * from proposition p where p.proposition = $1',
+            [proposition], function (exact) {
+        if (!noResults(exact)) {
+          var exactID = getID(exact);
+          console.log('exact: ' + exactID);
+          callback2(exactID, [exactID]);
+        } else {
+          newListOfMetadataTags(query, function (listID) {
+            newAssertable(query, 3, userID, function (assertableID) {
+              query('insert into proposition values ' +
+                  '($1, $2, default, $3) returning id',
+                  [assertableID, proposition, listID],
+                  function (propositionID) {
+                var newID = getID(propositionID);
+                console.log('new: ' + newID);
+                callback2(newID, [newID]);
+              });
+            });
+          });
+        }
+      });
+
+    } else if (key == fullCitationType) {
+      console.log('fullCitation: ' + key);
+      // TODO
+      callback2();
+    }
+
+  }
+
+  traverse(json, function () {
+
+    callback1('this function isn\'t done yet!');
+
+  });
+  
 }
 
 
 
-// set-up the database interface
+/* set-up the actual database interface */
 
 module.exports = function (environment, pg) {
 
-  // streamline the process of connecting to the database
+  /* streamline the process of connecting to the database */
 
   var logAllQueries = false;
 
@@ -1436,7 +1597,7 @@ module.exports = function (environment, pg) {
     });
   }
 
-  // controller: view-to-model communication
+  /* controller: view-to-model communication */
 
   return {
 
@@ -1526,7 +1687,7 @@ module.exports = function (environment, pg) {
                 });
               } else {
 
-                insert(json, userID, info.low, info.high,
+                insert(query, json, userID, info.low, info.high,
                     function (successMessage) {
 
                   done();
@@ -1617,3 +1778,4 @@ module.exports = function (environment, pg) {
 
   };
 }
+
