@@ -530,6 +530,32 @@ function searchAssertable (query, assertableJSON, callback) {
   }
 }
 
+// TODO: actual searching
+// function searchJson (query, json, callback1) {
+
+//   // TODO: factor this out with the other traverse() function?
+//   function traverse (something, callback2) {
+
+//     var key = Object.keys(something)[0];
+
+//     if (inArr(groupConnectives, key)) {
+//       traverse(something[key][0], function (results1) {
+//         traverse(something[key][1], function (results2) {
+//           // TODO: combine the group results
+//           callback2(results1.concat(results2));
+//         });
+//       });
+
+//     } else if (inArr(groupTypes, key)) {
+//       searchAssertable(query, something[key], callback2);
+
+//     } else { // full citation
+//       // TODO: handle the citation information
+//     }
+
+//     traverse(json, callback1);
+// }
+
 
 
 /* search similar exact functions (retrieve records by (1) their
@@ -1471,13 +1497,13 @@ function newAssertable (query, type, userID, callback) {
 function getOrInsertPerson (query, first, last, userID, callback) {
   searchPersonSimilarExact(query, [first, last], function (similar, exact) {
     if (!noResults(exact)) {
-      console.log('old person ' + exact[0]);
+      // console.log('old person ' + exact[0]);
       callback(exact[0]);
     } else {
       query('insert into person values (default, $1, default, ' +
           '$2, default, -1, $3, \'now\') returning id',
           [last, first, userID], function (result) {
-        console.log('new person ' + getID(result));
+        // console.log('new person ' + getID(result));
         callback(getID(result));
       });
     }
@@ -1496,7 +1522,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
     var key = Object.keys(something)[0];
 
     if (inArr(groupConnectives, key)) {
-      console.log('groupConnective: ' + key);
+      // console.log('groupConnective: ' + key);
       traverse(something[key][0], function () {
         traverse(something[key][1], function () {
           callback2();
@@ -1504,7 +1530,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
       });
 
     } else if (inArr(groupTypes, key)) {
-      console.log('groupType: ' + key);
+      // console.log('groupType: ' + key);
       traverse(something[key], function (result) {
         if (key == 'assertion') {
           assertion = result;
@@ -1526,7 +1552,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
             [result, type], function (exact) {
           if (!noResults(exact)) {
             var exactID = getID(exact);
-            console.log('old ' + key + ': ' + exactID);
+            // console.log('old ' + key + ': ' + exactID);
             callback2(exactID, dependencies.concat(exactID));
           } else {
             newAssertable(query, 1, userID, function (assertableID) {
@@ -1535,7 +1561,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
                   [assertableID, type, result, dependencies],
                   function (unaryID) {
                 var newID = getID(unaryID);
-                console.log('new ' + key + ': ' + newID);
+                // console.log('new ' + key + ': ' + newID);
                 callback2(newID, dependencies.concat(newID));
               });
             });
@@ -1554,7 +1580,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
               [result1, result2, type], function (exact) {
             if (!noResults(exact)) {
               var exactID = getID(exact);
-              console.log('old ' + key + ': ' + exactID);
+              // console.log('old ' + key + ': ' + exactID);
               callback2(exactID, depend1.concat(depend2).concat(exactID));
             } else {
               newAssertable(query, 2, userID, function (assertableID) {
@@ -1563,7 +1589,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
                     [assertableID, type, result1, result2, depend1, depend2],
                     function (binaryID) {
                   var newID = getID(binaryID);
-                  console.log('new ' + key + ': ' + newID);
+                  // console.log('new ' + key + ': ' + newID);
                   callback2(newID, depend1.concat(depend2).concat(newID));
                 });
               });
@@ -1580,7 +1606,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
             [proposition], function (exact) {
         if (!noResults(exact)) {
           var exactID = getID(exact);
-          console.log('old ' + key + ': ' + exactID);
+          // console.log('old ' + key + ': ' + exactID);
           callback2(exactID, [exactID]);
         } else {
           newListOfMetadataTags(query, function (listID) {
@@ -1590,7 +1616,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
                   [assertableID, proposition, listID],
                   function (propositionID) {
                 var newID = getID(propositionID);
-                console.log('new ' + key + ': ' + newID);
+                // console.log('new ' + key + ': ' + newID);
                 callback2(newID, [newID]);
               });
             });
@@ -1601,7 +1627,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
     } else if (key == fullCitationType) {
       // TODO: refactor to getOrInsertFullCitation()?
       // TODO: refactor ALL of the above to functions?
-      console.log('fullCitation');
+      // console.log('fullCitation');
 
       var fullCitation = something[key];
 
@@ -1670,7 +1696,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
               index = 1;
               listID = id;
               list.reverse();
-              console.log('new list: ' + listID);
+              // console.log('new list: ' + listID);
               addOnePersonToList();
             });
           }
@@ -1702,7 +1728,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
               // TODO: refactor getID() to take arbitrary arguments
               listID = result[0].list;
               list = [];
-              console.log('old list: ' + listID);
+              // console.log('old list: ' + listID);
               addOnePersonToList();
             } else {
               needNewListOfPeople();
@@ -1728,7 +1754,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
               [title], function (result) {
             if (!noResults(result)) {
               sourceID = getID(result);
-              console.log('old monograph: ' + sourceID);
+              // console.log('old monograph: ' + sourceID);
               handlePublisher();
             } else {
               query('insert into source values (default, 1, $1, default, $2, ' +
@@ -1736,7 +1762,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
                 sourceID = getID(id);
                 query('insert into monograph values ($1)',
                     [sourceID], function () {
-                  console.log('new monograph: ' + sourceID);
+                  // console.log('new monograph: ' + sourceID);
                   handlePublisher();
                 });
               });
@@ -1750,7 +1776,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
               [title, volume], function (result) {
             if (!noResults(result)) {
               sourceID = getID(result);
-              console.log('old periodical: ' + sourceID);
+              // console.log('old periodical: ' + sourceID);
               handlePublisher();
             } else {
               query('insert into source values (default, 2, $1, default, $2, ' +
@@ -1758,7 +1784,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
                 sourceID = getID(id);
                 query('insert into periodical values ($1, $2)',
                     [sourceID, volume], function () {
-                  console.log('new periodical: ' + sourceID);
+                  // console.log('new periodical: ' + sourceID);
                   handlePublisher();
                 });
               });
@@ -1771,7 +1797,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
               [title, editorsList], function (result) {
             if (!noResults(result)) {
               sourceID = getID(result);
-              console.log('old edited collection: ' + sourceID);
+              // console.log('old edited collection: ' + sourceID);
               handlePublisher();
             } else {
               query('insert into source values (default, 3, $1, default, $2, ' +
@@ -1779,7 +1805,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
                 sourceID = getID(id);
                 query('insert into edited_collection values ($1, $2)',
                     [sourceID, editorsList], function () {
-                  console.log('new edited collection: ' + sourceID);
+                  // console.log('new edited collection: ' + sourceID);
                   handlePublisher();
                 });
               });
@@ -1795,13 +1821,13 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
             [publisherName], function (result) {
           if (!noResults(result)) {
             publisherID = getID(result);
-            console.log('old publisher: ' + publisherID);
+            // console.log('old publisher: ' + publisherID);
             handleWork();
           } else {
             query('insert into publisher values (default, $1, default, $2, ' +
                 '\'now\') returning id', [publisherName, userID], function (id) {
               publisherID = getID(id);
-              console.log('new publisher: ' + publisherID);
+              // console.log('new publisher: ' + publisherID);
               handleWork();
             });
           }
@@ -1816,14 +1842,14 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
             [authorsList, year, sourceID, publisherID], function (result) {
           if (!noResults(result)) {
             workID = getID(result);
-            console.log('old work: ' + workID);
+            // console.log('old work: ' + workID);
             handleCitation();
           } else {
             query('insert into work values (default, $1, $2, ' +
                 '$3, $4, $5, \'now\') returning id', [authorsList, year,
                 sourceID, publisherID, userID], function (id) {
               workID = getID(id);
-              console.log('new work: ' + workID);
+              // console.log('new work: ' + workID);
               handleCitation();
             });
           }
@@ -1836,14 +1862,14 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
             [workID, pageLow, pageHigh], function (result) {
           if (!noResults(result)) {
             citation = getID(result);
-            console.log('old citation: ' + citation);
+            // console.log('old citation: ' + citation);
             callback2();
           } else {
             query('insert into citation values (default, $1, $2, ' +
                 '$3, $4, \'now\') returning id', [workID, pageLow,
                 pageHigh, userID], function (id) {
               citation = getID(id);
-              console.log('new citation: ' + citation);
+              // console.log('new citation: ' + citation);
               callback2();
             });
           }
@@ -1867,7 +1893,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
           [citation, assertion], function (result) {
         if (!noResults(result)) {
           claimID = getID(result);
-          console.log('old assertion: ' + claimID);
+          // console.log('old assertion: ' + claimID);
           callback1(claimID);
         } else {
           query('insert into claim values (default, 1, $1, true, $2, ' +
@@ -1875,7 +1901,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
             claimID = getID(id);
             query('insert into assertion values ($1, $2)',
                 [claimID, assertion], function () {
-              console.log('new assertion: ' + claimID);
+              // console.log('new assertion: ' + claimID);
               callback1(claimID);
             });
           });
@@ -1903,7 +1929,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
               conclusion, premisesListID], function (result) {
             if (!noResults(result)) {
               claimID = getID(result);
-              console.log('old argument: ' + claimID);
+              // console.log('old argument: ' + claimID);
               callback1(claimID);
             } else {
               query('insert into claim values (default, 2, $1, true, $2, ' +
@@ -1912,7 +1938,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
                 newListOfMetadataTags(query, function (metadataID) {
                   query('insert into argument values ($1, $2, $3, $4)', [claimID,
                       conclusion, premisesListID, metadataID], function () {
-                    console.log('new argument: ' + claimID);
+                    // console.log('new argument: ' + claimID);
                     callback1(claimID);
                   });
                 });
@@ -1926,7 +1952,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
         newListOfAssertables(query, function (id) {
           index = 1;
           premisesListID = id;
-          console.log('new list: ' + premisesListID);
+          // console.log('new list: ' + premisesListID);
           addOneAssertableToList();
         });
       }
@@ -1954,7 +1980,7 @@ function insert (query, json, userID, pageLow, pageHigh, callback1) {
         if (!noResults(result)) {
           premisesListID = result[0].list;
           premises = [];
-          console.log('old list: ' + premisesListID);
+          // console.log('old list: ' + premisesListID);
           addOneAssertableToList();
         } else {
           needNewListOfAssertables();
@@ -2108,9 +2134,49 @@ module.exports = function (environment, pg) {
       });
     },
 
-    search: function (queryObj, callback) {
-      // TODO
-      callback(undefined);
+    search: function (htmlForm, callback) {
+
+      // TODO: actual searching
+
+      // var json;
+      // if ('query' in htmlForm) {
+      //   json = {};
+      // } else {
+      //   htmlFormToJson(htmlForm, function (jsonResult) {
+      //     json = jsonResult;
+      //   });
+      // }
+
+      // connectToDatabase( function (query, done) {
+      //   searchJson(query, json, function (results) {
+      //     done();
+      //     callback(results);
+      //   });
+      // });
+
+      if ('query' in htmlForm) {
+        connectToDatabase( function (query, done) {
+          var results = 'basic search results:';
+          searchProposition(query, htmlForm['query'], function (ids) {
+            function getOne () {
+              var id = ids.pop();
+              if (id != undefined) {
+                fetchProposition(query, id, function (text) {
+                  results += '</br></br>' + text;
+                  getOne();
+                });
+              } else {
+                done();
+                callback(results);
+              }
+            }
+            getOne();
+          });
+        });
+      } else {
+        callback('advanced search coming soon!');
+      }
+
     },
 
     // old functions (from first database version)

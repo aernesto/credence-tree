@@ -103,24 +103,24 @@ function getUserID (request) {
 // set-up routing and app logic
 
 // FOR TESTING NEW DB LAYER
-app.get('/fetchAssertable', function (request, response) {
-  database.fetchAssertable(request.query['id'], function (result) {
-    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
-app.get('/fetchClaim', function (request, response) {
-  database.fetchClaim(request.query['id'], function (result) {
-    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
-app.get('/searchProposition', function (request, response) {
-  database.searchProposition(request.query['query'], function (result) {
-    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
-app.get('/searchAssertable', function (request, response) {
-  database.searchAssertable(request.query['query'], function (result) {
-    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
-app.get('/parseForm', function (request, response) {
-  database.parseForm(request.query, function (result) {
-    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
-app.get('/contribute2', function (request, response) {
-  database.contribute(request.query, -1, function (result) {
-    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
+// app.get('/fetchAssertable', function (request, response) {
+//   database.fetchAssertable(request.query['id'], function (result) {
+//     response.write(JSON.stringify(result, null, 4)); response.end(); }); });
+// app.get('/fetchClaim', function (request, response) {
+//   database.fetchClaim(request.query['id'], function (result) {
+//     response.write(JSON.stringify(result, null, 4)); response.end(); }); });
+// app.get('/searchProposition', function (request, response) {
+//   database.searchProposition(request.query['query'], function (result) {
+//     response.write(JSON.stringify(result, null, 4)); response.end(); }); });
+// app.get('/searchAssertable', function (request, response) {
+//   database.searchAssertable(request.query['query'], function (result) {
+//     response.write(JSON.stringify(result, null, 4)); response.end(); }); });
+// app.get('/parseForm', function (request, response) {
+//   database.parseForm(request.query, function (result) {
+//     response.write(JSON.stringify(result, null, 4)); response.end(); }); });
+// app.get('/contribute2', function (request, response) {
+//   database.contribute(request.query, -1, function (result) {
+//     response.write(JSON.stringify(result, null, 4)); response.end(); }); });
 
 app.get('/', function (request, response) {
   response.render('pages/home', {
@@ -151,16 +151,20 @@ app.get('/admin', function (request, response) {
   response.render('pages/md-file-wrapper', {
     userInfo: request.session.userInfo, md: md,
     filename: 'coming-soon.md'}); });
+app.get('/claim', function (request, response) {
+  response.render('pages/md-file-wrapper', {
+    userInfo: request.session.userInfo, md: md,
+    filename: 'coming-soon.md'}); });
 
 app.get('/search', function (request, response) {
   var queryObj = request.query;
   database.search(queryObj, function (dbResults) {
     response.render('pages/search', {
       userInfo: request.session.userInfo,
-      assertionResults: dbResults.assertions,
-      argumentResults: dbResults.arguments,
-      query: dbResults.query,
-      text: dbResults.text }); }); });
+      // assertionResults: dbResults.assertions,
+      // argumentResults: dbResults.arguments,
+      dbResults: dbResults,
+      query: queryObj }); }); });
 
 app.get('/contribute', function (request, response) {
   console.log('user ' + getUserID(request) + ', with user agent ' +
