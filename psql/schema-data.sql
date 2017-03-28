@@ -142,7 +142,7 @@ create table work (
   publisher integer not null references publisher,
   contributor integer not null references ct_user,
   contribution_time timestamp not null,
-  unique (source, publisher, year));
+  unique (authors, source, publisher, year));
 
 create table citation (
   id serial primary key,

@@ -17,10 +17,10 @@
   <% var json = databaseResults.json,
          errors = databaseResults.errors,
          comments = databaseResults.comments,
-         successMessage = databaseResults.successMessage; %>
+         newID = databaseResults.newID; %>
 
   <% if (errors != undefined && errors.length > 0 &&
-         Object.keys(query).length > 0) { %>
+      Object.keys(query).length > 0) { %>
 
     <div class='content-panel'>
 
@@ -142,10 +142,22 @@
 
     </div>
 
-  <% } else if (successMessage != undefined) { %>
+  <% } else if (newID != undefined) { %>
 
     <div class='content-panel'>
-      <br/> <%= successMessage %> <br/> <br/>
+
+      <br/> Your contribution was successful! <br/> <br/>
+
+      Thank you for contributing to Credence Tree!!! <br/> <br/>
+
+      Feel free to view your new content
+      <a href='/claim?<%= newID %>' target='_blank'>here</a>. <br/> <br/>
+
+      To contribute additional content re-using some of the information
+      in the form above (most notably the citation information, which can
+      be a pain to type in), feel free to edit the content of the form
+      and re-submit it using the button below. <br/> <br/>
+
     </div>
 
   <% } %>
