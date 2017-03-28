@@ -1,7 +1,13 @@
 
-## site description
+## site information
+
+### site description
 
 a database of assertions and arguments made by professional philosophers
+
+### current homepage url
+
+http://www.credencetree.com/
 
 ## technical information
 
@@ -18,12 +24,12 @@ a database of assertions and arguments made by professional philosophers
 * convenience:
   [EJS](http://ejs.co/),
   [Less](http://lesscss.org/),
-  [jQuery](https://jquery.com/),
   [Markdown](http://daringfireball.net/projects/markdown/)
 * ubiquitous:
   [HTML](https://www.w3.org/html/),
   [CSS](https://www.w3.org/style/css/),
-  [JavaScript](https://www.javascript.com/)
+  [JavaScript](https://www.javascript.com/),
+  [jQuery](https://jquery.com/)
 
 ### initial set-up instructions
 
@@ -32,22 +38,26 @@ a database of assertions and arguments made by professional philosophers
 1. `heroku addons:create heroku-postgresql:hobby-dev`
 1. `heroku addons:create heroku-redis:hobby-dev`
 1. create an `.env` file and populate it using `heroku config`
-1. run `/psql/schema-users.sql` and `-data` using `heroku pg:psql`
+1. open a psql shell with `heroku pg:psql`
+  1. run the contents of `/psql/schema-users.sql`
+  1. run the contents of `/psql/schema-data.sql`
 1. `npm install` to install all Node dependencies
 1. `heroku local` to spin-up a local instance
 
 ### recommendations for future development
 
-* better back-end support for:
-  * storage of graphical data
-    * querying with graph search algorithms
-  * storage of (propositional) logical data
-    * querying with logical expressions
-* better front-end support for:
-  * interfacing with graphical/logical data
-  * creating (and re-creating) complex forms
-* improve client-server communication
+* back-end: version 1.1
+  * 1.0 (OLD): initial database format
+  * 1.1 (CURRENT): added json intermediary
+  * 1.2 (PLANNED DEVELOPMENT)
+    * storage/querying of graphical data
+    * storage/querying of (propositional) logical data
+* front-end: version 1.0
+  * 1.0 (CURRENT): initial ui format
+  * 1.1 (PLANNED DEVELOPMENT)
+    * interfacing with graphical/logical data
+    * (re-)creating complex forms
 
 ### other miscellaneous information
 
-* total development time: approximately 175 hours
+* total development time: approximately ??? hours

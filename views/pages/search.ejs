@@ -7,16 +7,19 @@
   <% include ../partials/table-rows/header.ejs %>
   <% include ../partials/table-rows/empty.ejs %>
   <% include ../partials/table-rows/search-bar.ejs %>
+  <% include ../partials/table-rows/empty-short.ejs %>
 
-  <% if (typeof(text) != 'undefined') { %> <tr>
+  <!-- TODO: actual searching -->
+  <!-- <% include ../partials/table-rows/search-results.ejs %> -->
+  <tr>
     <td colspan='1' class='width1 results'></td>
     <td colspan='3' class='width3 results'>
-      <div class='content-panel'> <%- text %> </div> </td>
+      <div class='assertions content-panel'>
+        <%- dbResults %>
+      </div>
+    </td>
     <td colspan='1' class='width1 results'></td>
-  <% } %> </tr>
-
-  <% include ../partials/table-rows/empty-short.ejs %>
-  <% include ../partials/table-rows/search-results.ejs %>
+  </tr>
 
 </table>
 

@@ -76,6 +76,17 @@ $(document).ready( function () {
           nextGroupAndValue = 4;
       while (true) {
 
+        // handle this group's IN operator
+        var inPrefix = groupPrefix() + 'in',
+            select = getByName(inPrefix),
+            inVal = query[inPrefix];
+        if (groupID == 1 && inVal == undefined) {
+          inVal = 1;
+        } else {
+          inVal = parseInt(inVal); }
+        select.val(inVal);
+        citationChanged(select);
+
         if (inArr([4, 5, 6], nextGroupAndValue)) { // content group
 
           // handle all the rows in this group
@@ -131,6 +142,15 @@ $(document).ready( function () {
           }
 
         } else if (inArr([1, 2, 3], nextGroupAndValue)) { // citation group
+
+          // handle basic citation searches
+          if (inArr([4, 5, 6, 7], inVal)) {
+            var rowName = groupPrefix() + 'r1',
+                textInput = getByName(rowName),
+                rowVal = query[rowName];
+            if (rowVal != undefined) {
+              textInput.val(rowVal);
+              textInputChanged(textInput); }}
 
           // handle the title
           var titleName = groupPrefix() + 'title',
@@ -218,15 +238,7 @@ $(document).ready( function () {
         } else {
           console.log('OTHER: nextGroupAndValue = ' + nextGroupAndValue); }
 
-        // handle this group's IN operator
-        var inPrefix = groupPrefix() + 'in',
-            select = getByName(inPrefix),
-            inVal = query[inPrefix];
-        if (groupID == 1 && inVal == undefined) {
-          inVal = 1; }
-        select.val(inVal);
-        selectChanged(select);
-
+        // done with this group!
         groupID++;
 
         // handle the next group's AND operator

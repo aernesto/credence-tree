@@ -1,796 +1,2186 @@
 
-const openParen = 1,
-      closeParen = 1,
-      unaryOps = [2, 3, 4],
-      unaryToType = {2: 2, 3: 4, 4: 3},
-      binaryOps = [5, 6, 7, 8, 9],
-      binaryToType = {5: 1, 6: 2, 7: 3, 8: 4, 9: 5},
-      operators = unaryOps.concat(binaryOps),
-      opToString = {2: '~', 3: '&#9633;', 4: '&#9671;', 5: '&#8743;', 
-          6: '&#8744;', 7: '&#8594;', 8: '&#8596;', 9: '='}
+/* helper functions for constants section */
+
+function invert (object) {
+  var inversion = {};
+  for (var key in object) {
+    inversion[object[key]] = key; }
+  return inversion; }
+
+
+
+/* constants / definitions */
+
+var logAllQueries = false;
+
+const // assertable types
+      UNARY = 1,
+      BINARY = 2,
+      PROPOSITION = 3,
+      ATTRIBUTION = 4,
+      // claim types
+      ASSERTION = 1,
+      ARGUMENT = 2,
+      // unary types
+      unaryTypeToWord = {
+        2: 'not',
+        3: 'possibly',
+        4: 'necessarily'},
+      unaryWordToType = invert(unaryTypeToWord),
+      // binary types
+      IMPLICATION = 3,
+      binaryTypeToWord = {
+        1: 'and',
+        2: 'or',
+        3: 'implies',
+        4: 'if and only if',
+        5: 'is identical to'},
+      binaryWordToType = invert(binaryTypeToWord),
+      // html form elements
+      OPEN_PAREN = 1,
+      CLOSE_PAREN = 1,
+      unaryFormOps = [2, 3, 4],
+      binaryFormOps = [5, 6, 7, 8, 9],
+      unaryFormToJsonType = {2: 2, 3: 4, 4: 3},
+      binaryFormToJsonType = {5: 1, 6: 2, 7: 3, 8: 4, 9: 5},
       contentGroupLocations = [1, 2, 3],
-      citationGroupLocations = [4, 5, 6, 7],
+      basicCitationGroupLocations = [4, 5, 6, 7],
       fullCitationGroupLocations = [8],
-      groupAnds = [1, 4],
-      groupOrs  = [2, 5],
-      groupNots = [3, 6];
+      // json format structure keys
+      groupConnectives = ['group and', 'group or', 'group not'],
+      groupTypes = ['assertion', 'premise', 'conclusion'];
+      unaryTypes = Object.keys(unaryWordToType),
+      binaryTypes = Object.keys(binaryWordToType),
+      propositionType = 'proposition',
+      fullCitationType = 'full citation';
 
-module.exports = function (environment, pg) {
+// TODO: if we wanted to be really hardcore we could create a meta-database
+// format (in js) that could be just through a (js) script that compiles the
+// format definition into psql code to initialize the databases (ie, generate
+// the code that is currently housed in the schema-data.sql file, etc)
 
-  // (1) define private helper functions to...
 
-  // (A) ...streamline the process of connecting to the database
 
-  logAllQueries = false;
-  function connectToDatabase (callback) {
-    pg.connect(environment.DATABASE_URL, function (error, client, done) {
-      function query (queryString, queryParameters, callback) {
-        client.query(queryString, queryParameters, function (error, result) {
-          if (logAllQueries) {
-            console.log(queryString + ' ' + JSON.stringify(queryParameters) +
-                ' => ' + JSON.stringify(result ? result.rows : '')); }
-          if (error) {
-            console.log('ERROR (query): ' + error);
-            callback(undefined); }
-          else {
-            callback(result.rows); }}); }
-      if (error) {
-        console.log('ERROR (connectToDatabase): ' + error); }
-      else {
-        callback(query, done); }}); }
+/* other helper functions */
 
-  // (B) ...do generally useful things
+function noResults (results) {
+  return (results == undefined) || (results.length == 0);
+}
 
-  // check if a string is both defined and nonempty
-  function isDefined (thing) {
-    return (thing != undefined) && (thing != ''); }
+function empty (result) {
+  return (result == undefined) || (result == '');
+}
 
-  // simple <element in array> operator
-  function inArr (array, element) {
-    return array.indexOf(element) != -1; }
+function extractData (list, attributeName) {
+  var resultList = [];
+  while (!noResults(list)) {
+    resultList.push(list.pop()[attributeName]);
+  }
+  return resultList;
+}
 
-  // simple set arithmetic operators
-  function union (set1, set2) {
-    return new Set([...set1, ...set2]); }
-  function intersection (set1, set2) {
-    return new Set([...set1].filter(x =>  set2.has(x))); }
-  function difference (set1, set2) {
-    return new Set([...set1].filter(x => !set2.has(x))); }
+function extractIDs (list) {
+  return extractData(list, 'id');
+}
 
-  // like PSQL's plainto_tsquery() but with ORs instead of ANDs
-  function addOrs (queryText) {
-    if (queryText == undefined) { return undefined; }
-    else { return queryText.replace(/\s/g, ' | '); }}
-
-  // letter number to letter (ex: 0 -> A)
-  function letter (num) {
-    return String.fromCharCode(65 + num); }
-
-  // (C) ...assist with writing queries
-
-  // index: the parameter index of a string
-  // returns: all propositions containing a match for that string
-  function searchPropositionsByString (index) { return '\
-    select distinct * from proposition p \
-    where p.proposition_tsv @@ \
-      to_tsquery(\'english\', $' + index + ')'; }
-
-  // id: the parameter index of the id of an assertable
-  // returns: all assertions of that assertable
-  function searchAssertionsByAssertable (index) { return '\
-    select distinct a.id, a.assertable from assertion a \
-    where a.assertable = $' + index; }
-
-  // id: the parameter index of the id of an assertable
-  // returns: all arguments using that assertable
-  function searchArgumentsByAssertable (index) { return '\
-    select distinct a.id, a.conclusion, a.premises \
-    from argument a, list_of_assertables loa, \
-      list_of_assertables_element loae \
-    where a.conclusion = $' + index + '\
-      or (a.premises = loa.id \
-        and loae.list = loa.id \
-        and loae.assertable = $' + index + ')'; }
-
-  // year: the parameter index of a year of publication
-  // returns: all claims made in that year
-  function searchClaimsByYear (index) { return '\
-    select distinct cl.id, cl.type \
-    from claim cl, citation ci, work w \
-    where cl.citation = ci.id \
-      and ci.work = w.id \
-      and w.year = $' + index; }
-
-  // year: the parameter index of a string
-  // returns: all claims made by authors matching that string
-  function searchClaimsByAuthor (index) { return '\
-    select cl.id, cl.type \
-    from claim cl, citation ci, work w, list_of_people lop, \
-      list_of_people_element lope, person p \
-    where cl.citation = ci.id \
-    and ci.work = w.id \
-    and w.authors = lop.id \
-    and lope.list = lop.id \
-    and lope.person = p.id \
-    and (p.surname_tsv @@ to_tsquery($' + index + ') \
-      or p.given_name_s_tsv @@ to_tsquery($' + index + ') )'; }
-
-  function searchClaimsByCitation (queryObj, keys, curGroupPrefix) {
-    var selectClause = 'select distinct cl.id, cl.type',
-        fromClause = 'from claim cl, citation ci, work w, source s',
-        whereClause = 'where cl.citation = ci.id' +
-            ' and ci.work = w.id and w.source = s.id';
-    return generalSearchClaimsByCitation(queryObj, keys,
-        curGroupPrefix, selectClause, fromClause, whereClause, false); }
-
-  function searchCitations (queryObj, keys, curGroupPrefix, exact) {
-    var selectClause = 'select distinct w.id',
-        fromClause = 'from work w, source s',
-        whereClause = 'where w.source = s.id';
-    return generalSearchClaimsByCitation(queryObj, keys,
-        curGroupPrefix, selectClause, fromClause, whereClause, exact); }
-
-  function generalSearchClaimsByCitation (queryObj, keys,
-      curGroupPrefix, selectClause, fromClause, whereClause, exact) {
-    var authors = [],
-        editors = [],
-        authorID = 1,
-        editorID = 1;
-    // format all the authors
+function sanitize (text) {
+  if (text == undefined) {
+    return undefined;
+  } else {
+    var textOld = text.trim().replace('\t', ' ');
     while (true) {
-      var curAuthorSN = curGroupPrefix() + 'asn' + authorID;
-      var curAuthorGN = curGroupPrefix() + 'agn' + authorID;
-      if (inArr(keys, curAuthorSN) || inArr(keys, curAuthorGN)) {
-        var newPerson = {};
-        newPerson.sn = queryObj[curAuthorSN];
-        newPerson.gn = queryObj[curAuthorGN];
-        if (isDefined(newPerson.sn) || isDefined(newPerson.gn)) {
-          authors.push(newPerson); }
-        authorID++; }
-      else {
-        break; }}
-    // format all the editors
-    // TODO: refactor with author code
-    while (true) {
-      var curEditorSN = curGroupPrefix() + 'esn' + editorID;
-      var curEditorGN = curGroupPrefix() + 'egn' + editorID;
-      if (inArr(keys, curEditorSN) || inArr(keys, curEditorGN)) {
-        var newPerson = {};
-        newPerson.sn = queryObj[curEditorSN];
-        newPerson.gn = queryObj[curEditorGN];
-        if (isDefined(newPerson.sn) || isDefined(newPerson.gn)) {
-          editors.push(newPerson); }
-        editorID++; }
-      else {
-        break; }}
-    function getFromQueryObj (name) {
-      return queryObj[curGroupPrefix() + name]; }
-    var title = getFromQueryObj('title'),
-        publisher = getFromQueryObj('publisher'),
-        year = getFromQueryObj('year'),
-        volume = getFromQueryObj('volume'),
-        sourceType = getFromQueryObj('source');
-    return generalSearchByCitationHelper(authors,
-        editors, title, publisher, year, volume, sourceType,
-        selectClause, fromClause, whereClause, exact); }
-
-  function generalSearchByCitationHelper (
-      authors, editors, title, publisher, year, volume, sourceType,
-      selectClause, fromClause, whereClause, exact) {
-    var personID = 1,
-        params = [],
-        curIndex = function () { return params.length; };
-    if (authors && authors.length > 0) {
-      fromClause += ', list_of_people lop1';
-      whereClause += ' and w.authors = lop1.id'; }
-    for (var i = 0; i < authors.length; i++) {
-      var author = authors[i],
-          curP = 'p' + personID,
-          curLOPE = 'lope' + personID;
-      fromClause += ', person ' + curP + 
-          ', list_of_people_element ' + curLOPE;
-      whereClause += ' and ' + curLOPE + '.list = lop1.id and ' + 
-          curLOPE + '.person = ' + curP + '.id';
-      if (isDefined(author.gn)) {
-        if (exact) {
-          params.push(author.gn);
-          whereClause += ' and ' + curP + 
-              '.given_name_s = $' + curIndex(); }
-        else {
-          params.push(addOrs(author.gn));
-          whereClause += ' and ' + curP + 
-              '.given_name_s_tsv @@ to_tsquery($' + curIndex() + ')'; }}
-      if (isDefined(author.sn)) {
-        if (exact) {
-          params.push(author.sn);
-          whereClause += ' and ' + curP + 
-              '.surname = $' + curIndex(); }
-        else {
-          params.push(addOrs(author.sn));
-          whereClause += ' and ' + curP + 
-              '.surname_tsv @@ to_tsquery($' + curIndex() + ')'; }}
-      personID++; }
-    if (sourceType == 2) {
-      // TODO: refactor with the author code
-      if (editors && editors.length > 0) {
-        fromClause += ', list_of_people lop2' +
-            ', edited_collection ec';
-        whereClause += ' and ec.id = s.id and ec.editors = lop2.id'; }
-      for (var i = 0; i < editors.length; i++) {
-        var editor = editors[i],
-            curP = 'p' + personID,
-            curLOPE = 'lope' + personID;
-        fromClause += ', person ' + curP + 
-            ', list_of_people_element ' + curLOPE;
-        whereClause += ' and ' + curLOPE + '.list = lop2.id and ' + 
-            curLOPE + '.person = ' + curP + '.id';
-        if (isDefined(editor.gn)) {
-          if (exact) {
-            params.push(editor.gn);
-            whereClause += ' and ' + curP + 
-                '.given_name_s = $' + curIndex(); }
-          else {
-            params.push(addOrs(editor.gn));
-            whereClause += ' and ' + curP + 
-                '.given_name_s_tsv @@ to_tsquery($' + curIndex() + ')'; }}
-        if (isDefined(editor.sn)) {
-          if (exact) {
-            params.push(editor.sn);
-            whereClause += ' and ' + curP + 
-                '.surname = $' + curIndex(); }
-          else {
-            params.push(addOrs(editor.sn));
-            whereClause += ' and ' + curP + 
-                '.surname_tsv @@ to_tsquery($' + curIndex() + ')'; }}
-        personID++; }}
-    if (isDefined(title)) {
-      if (exact) {
-        params.push(title);
-        whereClause += ' and s.title = $' + curIndex(); }
-      else {
-        params.push(addOrs(title));
-        whereClause += ' and s.title_tsv @@ to_tsquery($' + curIndex() + ')'; }}
-    if (isDefined(publisher)) {
-      fromClause += ', publisher pub';
-      if (exact) {
-        params.push(publisher);
-        whereClause += ' and pub.id = w.publisher' +
-            ' and pub.name = $' + curIndex(); }
-      else {
-        params.push(addOrs(publisher));
-        whereClause += ' and pub.id = w.publisher' +
-            ' and pub.name_tsv @@ to_tsquery($' + curIndex() + ')'; }}
-    if (isDefined(year)) {
-      params.push(addOrs(year));
-      whereClause += ' and w.year = $' + curIndex(); }
-    if (sourceType == 3 && isDefined(volume)) {
-      fromClause += ', periodical per';
-      whereClause += ' and per.id = s.id and per.volume = ' + volume; }
-    var query = selectClause + ' ' + fromClause + ' ' + whereClause,
-        queryInfo = {
-          authors: authors,
-          editors: editors,
-          title: title,
-          publisher: publisher,
-          year: year,
-          volume: volume,
-          sourceType: sourceType};
-    return [query, params, queryInfo]; }
-
-  function searchUnariesByChild (
-      unaryTypeIndex, assertableListIndex) { return '\
-    select distinct u.id from unary_assertable u \
-    where u.type = $' + unaryTypeIndex + ' \
-    and u.assertable = any($' + assertableListIndex + ')'; }
-
-  function searchBinariesByChild (binaryTypeIndex,
-      leftAssertableListIndex, rightAssertableListIndex) { return '\
-    select distinct b.id from binary_assertable b \
-    where b.type = $' + binaryTypeIndex + ' \
-    and (b.assertable1 = any($' + leftAssertableListIndex + ') \
-    or b.assertable2 = any($' + rightAssertableListIndex + ') )'; }
-
-  // id: the parameter index of the id of an assertable
-  // returns: (the id's of the parents of that assertable |
-  // the types of the parents | the operator in the parents)
-  function searchAssertableParents (index) { return '\
-    select distinct u.id, 1 as type, u.type as operator \
-    from unary_assertable u \
-    where u.assertable = $' + index + ' \
-      union select distinct a.id, 4, 0 \
-      from attribution a \
-      where a.assertable = $' + index + ' \
-        union select distinct b.id, 2, b.type \
-        from binary_assertable b \
-        where b.assertable1 = $' + index + ' \
-        or b.assertable2 = $' + index; }
-
-  // (E) ...assist with parsing queries
-
-  function parseGroup (queryObj, curGroupKeys, curGroupPrefix, callback) {
-    // TODO: refactor: these parameters should be more logically orthogonal
-    // TODO: really this should be supported by a better back-end typing system
-    var curThingID = -1,
-        allThingID = -1,
-        prevOperator = [],
-        prevOpenParenID = [],
-        logicalRequirements = [],
-        logicalDependencies = {},
-        propQueries = {};
-    function incCurID () {
-      curThingID = ++allThingID; }
-    function handlePrevOperator () {
-      if (prevOperator.length > 0) {
-        var requirement = prevOperator.pop();
-        requirement['right'] = curThingID;
-        logicalRequirements.push(requirement); }}
-    function handlePrevOpenParen () {
-      prevOpenParenID.forEach( function (id) {
-        logicalDependencies[id].push(curThingID); }); }
-    if (curGroupKeys.length > 0) {
-      var curRow = 1,
-          curRowIsEmpty = true,
-          curRowPrefix = function () { return 'r' + curRow; },
-          curPrefix = function () { 
-            return curGroupPrefix() + curRowPrefix(); };
-      function handleRow () {
-        var curRowIsEmpty = true;
-        if (inArr(curGroupKeys, curPrefix())) {
-          curRowIsEmpty = false;
-          var curRowSearchTerm = curGroupKeys[curPrefix()],
-              curBefore = 1,
-              curBeforeTerm = function () { 
-                return curPrefix() + 'b' + curBefore; };
-          function handleBefore () {
-            if (inArr(curGroupKeys, curBeforeTerm())) {
-              var curThing = parseInt(queryObj[curBeforeTerm()]);
-              if (curThing == openParen) {
-                incCurID();
-                prevOpenParenID.push(curThingID);
-                logicalDependencies[curThingID] = [];
-                handlePrevOperator(); }
-              else if (inArr(unaryOps, curThing)) {
-                incCurID();
-                handlePrevOperator();
-                handlePrevOpenParen();
-                prevOperator.push({
-                    'id': curThingID,
-                    'op': curThing}); }
-              else if (inArr(binaryOps, curThing)) {
-                var prevThingID = curThingID;
-                incCurID();
-                handlePrevOpenParen();
-                prevOperator.push({
-                    'id': curThingID,
-                    'op': curThing,
-                    'left': prevThingID}); }
-              else {
-                // TODO: error handling
-              }
-
-              curRowIsEmpty = false;
-              curBefore++;
-              handleBefore();
-
-            } else {
-
-              incCurID();
-              var curThing = queryObj[curPrefix()];
-              propQueries[curThingID] = curThing;
-              handlePrevOperator();
-              handlePrevOpenParen();
-
-              var curAfter = 1,
-                  curAfterTerm = function () { 
-                    return curPrefix() + 'a' + curAfter; };
-              function handleAfter () {
-                if (inArr(curGroupKeys, curAfterTerm())) {
-
-                  var curThing = parseInt(queryObj[curAfterTerm()]);
-                  if (curThing == closeParen) {
-                    curThingID = prevOpenParenID.pop(); }
-                  else {
-                    // TODO: error handling
-                  }
-
-                  curRowIsEmpty = false;
-                  curAfter++;
-                  handleAfter();
-                } else {
-                  curRow++;
-                  handleRow();
-                }
-              }
-              handleAfter();
-            }
-          }
-          handleBefore();
-
-        } else {
-          // done with this group
-          var returnVal = {};
-          returnVal.logicalRequirements = logicalRequirements;
-          returnVal.logicalDependencies = logicalDependencies;
-          returnVal.propQueries = propQueries;
-          callback(returnVal);
-        }
+      var textNew = textOld.replace('  ', ' ');
+      if (textNew == textOld) {
+        return textNew;
+      } else {
+        textOld = textNew;
       }
-      handleRow();
-    } else {
-      // nothing to parse in this group
-      callback(undefined);
     }
   }
+}
 
-  function parseLogic (parseResults) {
-    // TODO: really this should be a recursive descent parser, but, as with
-    // parseGroup(), that would require a better back-end typing system
+// like PSQL's plainto_tsquery() but with ORs instead of ANDs
+function addOrs (queryText) {
+  if (queryText == undefined) {
+    return undefined;
+  } else {
+    return sanitize(queryText).replace(/\s/g, ' | ');
+  }
+}
 
-    var requirements = {}
-        requirementsOld = parseResults.logicalRequirements,
-        dependencies = parseResults.logicalDependencies,
-        queries = parseResults.propQueries;
-    requirementsOld.forEach( function (requirement) {
-      var id = requirement.id;
-      delete requirement.id;
-      requirements[id] = requirement; });
+// simple <element in array> operator
+function inArr (array, element) {
+  return array.indexOf(element) != -1;
+}
 
-    var maxID = 0;
-    while (true) {
-      var foundOne = false;
-      if (maxID in requirements) { foundOne = true; }
-      if (maxID in dependencies) { foundOne = true; }
-      if (maxID in queries) { foundOne = true; }
-      if (foundOne) { maxID++; continue; }
-      else { maxID--; break; }}
-    var idToString = {},
-        solvedIDs = [],
-        queriesToString = [],
-        curQueryID = 0;
-    for (var id = 0; id <= maxID; id++) {
-      if (id in queries) {
-        var curLetter = letter(curQueryID);
-        idToString[id] = curLetter;
-        solvedIDs.push(parseInt(id));
-        queriesToString.push(curLetter + ': ' + queries[id]);
-        curQueryID++; }}
 
-    // TODO: implement a legit cloning method
-    var allRequirements = JSON.parse(JSON.stringify(requirements)),
-        allDependencies = JSON.parse(JSON.stringify(dependencies));
-    for (dependency in allDependencies) {
-      allDependencies[dependency] = {
-        'ids': allDependencies[dependency] }; }
 
-    var attemptNum = 0;
-    while (true) {
-      for (id in requirements) {
-        var requirement = requirements[id],
-            op = requirement.op,
-            left = requirement.left,
-            right = requirement.right;
-        if (inArr(unaryOps, op)) {
-          if (right in idToString) {
-            idToString[id] = opToString[op] + '(' + idToString[right] + ')';
-            solvedIDs.push(parseInt(id));
-            delete requirements[id];
-          }
-        } else if (inArr(binaryOps, op)) {
-          if ((left in idToString) && (right in idToString)) {
-            idToString[id] = '(' + idToString[left] + ')' + 
-                opToString[op] + '(' + idToString[right] + ')';
-            solvedIDs.push(parseInt(id));
-            delete requirements[id];
-          }
-        }
-      }
-      for (id in dependencies) {
-        var dependency = dependencies[id],
-            solved = true,
-            lastSolvedIndex = 0;
-        dependency.forEach( function (otherID) {
-          var index = solvedIDs.indexOf(parseInt(otherID));
-          if (index > lastSolvedIndex) {
-            lastSolvedIndex = index;
-          } else if (index == -1) {
-            solved = false;
+/* fetch functions (retrieve records by their id's) */
+
+function _fetchList (query, listTableName, listItemName, listID, callback) {
+
+  query('select distinct * from ' + listTableName + ' where list = $1',
+      [listID], function (listResults) {
+
+    if (noResults(listResults)) {
+      callback(undefined);
+    } else {
+
+      callback(extractData(listResults, listItemName));
+    }
+  });
+}
+
+function fetchListOfAssertables (query, listID, callback) {
+  _fetchList(query, 'list_of_assertables_element',
+      'assertable', listID, callback);
+}
+
+function fetchListOfThings (query, fetchFunction, listOfIDs, callback) {
+
+  if (noResults(listOfIDs)) {
+    callback(undefined);
+  } else {
+
+    var curResults = [];
+
+    function fetchListOfThingsHelper () {
+
+      if (noResults(listOfIDs)) {
+        callback(curResults);
+      } else {
+
+        var curID = listOfIDs.pop();
+
+        fetchFunction(query, curID, function (curResult) {
+
+          if (noResults(curResult)) {
+            callback(undefined);
+          } else {
+
+            curResults.push(curResult);
+
+            fetchListOfThingsHelper();
           }
         });
-        if (solved) {
-          var lastSolved = solvedIDs[lastSolvedIndex];
-          idToString[id] = idToString[lastSolved];
-          allDependencies[id].id = lastSolved;
-          solvedIDs.push(parseInt(id));
-          delete dependencies[id];
-        }
       }
-      if ((attemptNum++ > maxID) || solvedIDs.length == (maxID + 1)) { break; }
     }
-    var groupAsLogicString = idToString[solvedIDs.slice(-1)[0]];
 
-    return [groupAsLogicString, queriesToString, 
-        [allRequirements, allDependencies, solvedIDs]];
+    fetchListOfThingsHelper();
   }
+}
 
-  const lineReturn = '<br/>',
-      lineBreak = lineReturn + lineReturn;
+function _fetchSimple (query, thingID, callback,
+    tableName, itemName, nameColumn) {
 
-  function createQuerySummaryString (queries, logicString) {
-    var summaryString = '';
-    queries.forEach( function (propString) {
-      summaryString += propString + lineReturn; });
-    summaryString += logicString;
-    return summaryString; }
+  query('select distinct * from '+tableName+' '+itemName+' where '+
+      itemName+'.id = $1', [thingID], function (results) {
 
-  // (E) ...automate complex querying procedures
+    if (noResults(results)) {
+      callback(undefined);
+    } else {
 
-  function fetchResultsForProposition (query, searchTerm, callback) {
-    generalFetchForProposition(query, searchTerm, true, callback); }
+      callback(results[0][nameColumn]);
+    }
+  });
+}
 
-  function fetchAllParentsOfProposition (query, searchTerm, callback) {
-    generalFetchForProposition(query, searchTerm, false, callback); }
+function fetchTitle (query, titleID, callback) {
+  _fetchSimple(query, titleID, callback, 'source', 's', 'title');
+}
 
-  function generalFetchForProposition (
-      query, searchTerm, onlyResults, callback) {
-    generalFetch(query, searchPropositionsByString(1), 
-        [searchTerm], onlyResults, callback); }
+function fetchPublisher (query, publisherID, callback) {
+  _fetchSimple(query, publisherID, callback, 'publisher', 'p', 'name');
+}
 
-  function fetchAllParentsOfUnary (
-      query, unaryType, assertableList, callback) {
-    generalFetch(query, searchUnariesByChild(1, 2), 
-        [unaryType, assertableList], false, callback); }
+function fetchProposition (query, propositionID, callback) {
+  _fetchSimple(query, propositionID, callback,
+      'proposition', 'p', 'proposition');
+}
 
-  function fetchAllParentsOfBinary (query, binaryType, 
-      leftAssertableList, rightAssertableList, callback) {
-    generalFetch(query, searchBinariesByChild(1, 2, 3), [binaryType, 
-        leftAssertableList, rightAssertableList], false, callback); }
+function fetchPerson (query, personID, callback) {
+  // TODO: refactor with _fetchSimple() ?
 
-  function generalFetch (
-      query, sourceQuery, sourceParams, onlyResults, callback) {
-    query(sourceQuery, sourceParams, function (results) {
-      var frontier = [],
-          allResults = [],
-          distance = {};
-      function pushResults (resultsList, newResults) {
-        newResults.forEach( function (result) {
-          var newID = result.id || result;
-          if (!inArr(resultsList, newID)) {
-            resultsList.push(newID); }}); }
-      pushResults(frontier, results);
-      frontier.forEach( function (node) {
-        distance[node] = 0; });
-      function findAnotherParent () {
-        // TODO: can this be refactored for speed by using 'where any()' in
-        // searchAssertableParents(), as was done in searchUnariesByChild()?
-        var nextNode = frontier.pop(),
-            nextNodeDistance = distance[nextNode];
-        if (nextNode != undefined) {
-          pushResults(allResults, [nextNode]);
-          query(searchAssertableParents(1),
-              [nextNode], function (results) {
-            pushResults(frontier, results);
-            results.forEach( function (result) {
-              var curResult = result.id,
-                  newDistance = nextNodeDistance + 1;
-              if (curResult in distance) {
-                newDistance = Math.min(distance[curResult], newDistance) }
-              distance[curResult] = newDistance; });
-            findAnotherParent(); }); }
-        else {
-          if (!onlyResults) {
-            callback(allResults); }
-          else {
-            var allAssertions = [],
-                allResults2 = [];
-            function contains (list, element1) {
-              var returnVal = false;
-              list.forEach( function (element2) {
-                if (element1.id == element2.id) {
-                  returnVal = true; }});
-              return returnVal; }
-            function findAnotherAssertion () {
-              nextNode = allResults.pop();
-              if (nextNode != undefined) {
-                allResults2.push(nextNode);
-                query(searchAssertionsByAssertable(1),
-                    [nextNode], function (results) {
-                  results.forEach( function (result) {
-                    var newResult = {
-                      'id': result.id,
-                      'distance': distance[nextNode] };
-                    if (!contains(allAssertions, newResult)) {
-                      allAssertions.push(newResult); }});
-                  findAnotherAssertion(); }); }
-              else {
-                var allArguments = [];
-                // TODO: refactor with findAnotherAssertion()
-                function findAnotherArgument () {
-                  nextNode = allResults2.pop();
-                  if (nextNode != undefined) {
-                    query(searchArgumentsByAssertable(1),
-                        [nextNode], function (results) {
-                      results.forEach( function (result) {
-                        var newResult = {
-                          'id': result.id,
-                          'distance': distance[nextNode] };
-                        if (!contains(allArguments, newResult)) {
-                          allArguments.push(newResult); }});
-                      findAnotherArgument(); }); }
-                  else {
-                    callback({
-                      'assertions': allAssertions,
-                      'arguments': allArguments }); }}
-                findAnotherArgument(); }}
-            findAnotherAssertion(); }}}
-      findAnotherParent(); }); }
+  query('select distinct * from person p where '+
+      'p.id = $1', [personID], function (results) {
 
-  // function searchAssertionsByAssertable (index) { return '\
-  //   select distinct a.id from assertion a \
-  //   where a.assertable = $' + index; }
+    if (noResults(results)) {
+      callback(undefined);
+    } else {
 
-  // // id: the parameter index of the id of an assertable
-  // // returns: all arguments using that assertable
-  // function searchArgumentsByAssertable (index) { return '\
+      var result = results[0];
+      callback(result['surname'] + ', ' + result['given_name_s']);
+    }
+  });
+}
 
-  function fetchFullAssertableByID (query, id, callback) {
-    // console.log('fetchFullAssertableByID(id: ' + id + ')');
-    query('select * from assertable a where a.id = $1',
-        [id], function (results) {
-      if (results && results[0] && results[0].type) {
-        var type = results[0].type;
-        if (type == 1) {
-          query('select * from unary_assertable u where u.id = $1',
-              [id], function (results) {
-            if (results && results[0] && 
-                results[0].assertable && results[0].type) {
-              fetchFullAssertableByID(query, 
-                  results[0].assertable, function (assertableObj) {
-                // console.log('assertableObj = ' + JSON.stringify(assertableObj));
-                callback({
-                  id: id,
-                  typeA: type,
-                  typeB: results[0].type,
-                  right: assertableObj
-                });
+function fetchAssertable (query, assertableID, callback) {
+
+  query('select distinct * from assertable a where a.id = $1',
+      [assertableID], function (assertableResults) {
+
+    if (noResults(assertableResults)) {
+      callback(undefined);
+    } else {
+
+      var assertableResult = assertableResults[0],
+          assertableType = assertableResult.type,
+          assertableJSON = {'id': assertableID};
+
+      if (assertableType == PROPOSITION) {
+
+        query('select distinct * from proposition p where p.id = $1',
+            [assertableID], function (propositionResults) {
+
+          if (noResults(propositionResults)) {
+            callback(undefined);
+          } else {
+
+            var propositionResult = propositionResults[0],
+                proposition = propositionResult.proposition;
+
+            assertableJSON.proposition = proposition;
+            callback(assertableJSON);
+          }
+        });
+
+      } else if (assertableType == UNARY) {
+
+        query('select distinct * from unary_assertable u where u.id = $1',
+            [assertableID], function (unaryResults) {
+
+          if (noResults(unaryResults)) {
+            callback(undefined);
+          } else {
+
+            var unaryResult = unaryResults[0],
+                unaryType = unaryResult.type,
+                unaryAssertableID = unaryResult.assertable;
+
+            fetchAssertable(query, unaryAssertableID,
+                function (unaryAssertableJSON) {
+
+              assertableJSON[unaryTypeToWord[unaryType]] = unaryAssertableJSON;
+              callback(assertableJSON);
+            });
+          }
+        });
+
+      } else if (assertableType == BINARY) {
+
+        query('select distinct * from binary_assertable b where b.id = $1',
+            [assertableID], function (binaryResults) {
+
+          if (noResults(binaryResults)) {
+            callback(undefined);
+          } else {
+
+            var binaryResult = binaryResults[0],
+                binaryType = binaryResult.type,
+                binaryAssertableID1 = binaryResult.assertable1,
+                binaryAssertableID2 = binaryResult.assertable2;
+
+            fetchAssertable(query, binaryAssertableID1,
+                function (binaryAssertableJSON1) {
+              fetchAssertable(query, binaryAssertableID2,
+                  function (binaryAssertableJSON2) {
+
+                assertableJSON[binaryTypeToWord[binaryType]] =
+                    [binaryAssertableJSON1, binaryAssertableJSON2];
+                callback(assertableJSON);
               });
-            }
-            else {
-              callback(undefined);
-            }
-          });
-        }
-        else if (type == 2) {
-          query('select * from binary_assertable b where b.id = $1',
-              [id], function (results) {
-            if (results && results[0] && results[0].assertable1 &&
-                results[0].assertable2 && results[0].type) {
-              fetchFullAssertableByID(query, 
-                  results[0].assertable1, function (assertable1Obj) {
-                fetchFullAssertableByID(query, 
-                    results[0].assertable2, function (assertable2Obj) {
-                  // console.log('assertableObj1 = ' + JSON.stringify(assertable1Obj));
-                  // console.log('assertableObj2 = ' + JSON.stringify(assertable2Obj));
-                  callback({
-                    id: id,
-                    typeA: type,
-                    typeB: results[0].type,
-                    left: assertable1Obj,
-                    right: assertable2Obj
-                  });
-                });
-              });
-            }
-            else {
-              callback(undefined);
-            }
-          });
-        }
-        else if (type == 3) {
-          query('select * from proposition p where p.id = $1',
-              [id], function (results) {
-            if (results && results[0] && results[0].proposition) {
-              callback({
-                id: id,
-                typeA: type,
-                prop: results[0].proposition
-              });
-            }
-            else {
-              callback(undefined);
-            }
-          });
-        }
-        else if (type == 4) {
-          // TODO
-          callback(undefined);
-        }
-        else {
-          callback(undefined);
-        }
-      }
-      else {
+            });
+          }
+        });
+
+      } else if (assertableType == ATTRIBUTION) {
+        callback(undefined); // TODO
+
+      } else {
         callback(undefined);
       }
-    });
-  }
+    }
+  });
+}
 
-  function fetchFullClaimByChildID (query, id, callback) {
-    // console.log('fetchFullClaimByChildID(id: ' + id + ')');
-    var allAssertions = [], allArguments = [];
-    query(searchAssertionsByAssertable(1), [id], function (assertionsResults) {
-      query(searchArgumentsByAssertable(1), [id], function (argumentsResults) {
-        // console.log('  assertions = ' + JSON.stringify(assertionsResults));
-        // console.log('  arguments = ' + JSON.stringify(argumentsResults));
-        function fetchOneAssertion () {
-          var assertion = assertionsResults.pop();
-          if (assertion != undefined) {
-            var assertable = assertion.assertable;
-            if (assertable) {
-              fetchFullAssertableByID(query, assertable,
-                  function (assertableObj) {
-                // TODO: check if this obj's id is already in list
-                // console.log('  assertableObj = ' + JSON.stringify(assertableObj));
-                allAssertions.push(assertableObj);
-                fetchOneAssertion();
-              });
+function fetchCitation (query, claimID, callback) {
+  callback(undefined); // TODO
+}
+
+function fetchClaim (query, claimID, callback) {
+
+  query('select distinct * from claim c where c.id = $1',
+      [claimID], function (claimResults) {
+
+    if (noResults(claimResults)) {
+      callback(undefined);
+    } else {
+
+      var claimResult = claimResults[0],
+          claimType = claimResult.type,
+          citationID = claimResult.citation,
+          visible = claimResult.visible_in_search_results,
+          claimJSON = {'id': claimID, 'visible': visible};
+
+      fetchCitation(query, citationID, function (citationJSON) {
+
+        claimJSON.citation = citationJSON;
+
+        if (claimType == ASSERTION) {
+
+          query('select distinct * from assertion a where a.id = $1',
+              [claimID], function (assertionResults) {
+
+            if (noResults(assertionResults)) {
+              callback(undefined);
             } else {
-              fetchOneAssertion();
+
+              var assertionResult = assertionResults[0],
+                  assertableID = assertionResult.assertable;
+
+              fetchAssertable(query, assertableID,
+                  function (assertableJSON) {
+
+                claimJSON.asserts = assertableJSON;
+                callback(claimJSON);
+              });
             }
-          }
-          else {
-            function fetchOneArgument () {
-              var argument = argumentsResults.pop(),
-                  newArgumentObj = {};
-              if (argument != undefined) {
-                var conclusion = argument.conclusion;
-                if (conclusion) {
-                  fetchFullAssertableByID(query, conclusion,
-                      function (conclusionObj) {
-                    newArgumentObj['C'] = conclusionObj;
-                    query('select distinct * from list_of_assertables_element ' +
-                        'loae where loae.list = $1', [argument.premises], 
-                        function (premises) {
-                      function fetchOnePremise () {
-                        var premise = premises.pop();
-                        if (premise && premise.assertable) {
-                          fetchFullAssertableByID(query, premise.assertable,
-                              function (premiseObj) {
-                            newArgumentObj['P' + premise.index] = premiseObj;
-                            fetchOnePremise();
-                          });
-                        }
-                        else {
-                          allArguments.push(newArgumentObj);
-                          fetchOneArgument();
-                        }
-                      }
-                      fetchOnePremise();
-                    });
+          });
+
+        } else if (claimType == ARGUMENT) {
+
+          query('select distinct * from argument a where a.id = $1',
+              [claimID], function (argumentResults) {
+
+            if (noResults(argumentResults)) {
+              callback(undefined);
+            } else {
+
+              var argumentResult = argumentResults[0],
+                  conclusionID = argumentResult.conclusion,
+                  premisesListID = argumentResult.premises;
+
+              fetchAssertable(query, conclusionID,
+                  function (conclusionJSON) {
+                fetchListOfAssertables(query, premisesListID,
+                    function (premisesIDs) {
+                  fetchListOfThings(query, fetchAssertable,
+                      premisesIDs, function (premisesJSON) {
+
+                    claimJSON.premises = premisesJSON;
+                    claimJSON.conclusion = conclusionJSON;
+                    callback(claimJSON);
                   });
-                } else {
-                  fetchOneArgument();
-                }
-              }
-              else {
-                // console.log('  allAssertions = ' + JSON.stringify(allAssertions));
-                // console.log('  allArguments = ' + JSON.stringify(allArguments));
-                callback({
-                  assertions: allAssertions,
-                  arguments: allArguments
                 });
-              }
+
+              });
             }
-            fetchOneArgument();
+          });
+
+        } else {
+          callback(undefined);
+        }
+      });
+    }
+  });
+}
+
+
+
+/* search functions (retrieve records by their similarity to given data) */
+
+// accepts string of a proposition, returns a list of ids
+function searchProposition (query, searchString, callback) {
+
+  query('select distinct * from proposition p where ' +
+      'p.proposition_tsv @@ to_tsquery(\'english\', $1)',
+      [addOrs(searchString)], function (results) {
+
+    if (noResults(results)) {
+      callback(undefined);
+    } else {
+
+      callback(extractIDs(results));
+    }
+  });
+}
+
+// accepts json of an assertable, returns a list of ids
+function searchAssertable (query, assertableJSON, callback) {
+
+  if (noResults(assertableJSON)) {
+    callback(undefined);
+  } else {
+
+    if ('proposition' in assertableJSON) {
+      searchProposition(query, assertableJSON.proposition, callback);
+
+    } else {
+
+      var foundSomething = false;
+
+      for (var word in unaryWordToType) {
+        if (word in assertableJSON && !foundSomething) {
+          foundSomething = true;
+
+          var type = unaryWordToType[word],
+              json = assertableJSON[word];
+
+          searchAssertable(query, json, function (results1) {
+                
+            var queryText = 'select distinct * ' +
+                'from unary_assertable u where ',
+                params = [];
+            if (!noResults(results1)) {
+              params.push(results1);
+              queryText += '$' + params.length +
+                  ' && u.dependencies and ';
+            }
+            params.push(type);
+            queryText += '$' + params.length + ' = u.type';
+          
+            query(queryText, params, function (results2) {
+
+              if (noResults(results2)) {
+                callback(undefined);
+              } else {
+                
+                callback(extractIDs(results2));
+              }
+            });
+          });
+        }
+      }
+
+      for (var word in binaryWordToType) {
+        if (word in assertableJSON && !foundSomething) {
+          foundSomething = true;
+
+          var type = binaryWordToType[word],
+              jsonList = assertableJSON[word];
+
+          if (jsonList.length != 2) {
+            callback(undefined);
+          } else {
+
+            searchAssertable(query, jsonList[0], function (results1) {
+              searchAssertable(query, jsonList[1], function (results2) {
+
+                var list1 = [], list2 = [];
+
+                if (!noResults(results1)) {
+                  for (var i = 0; i < results1.length; i++) {
+                    var element = results1[i];
+                    if (!inArr(list1, element)) {
+                      list1.push(element);
+                    }
+                    if (type != IMPLICATION && !inArr(list2, element)) {
+                      list2.push(element);
+                    }
+                  }
+                }
+
+                if (!noResults(results2)) {
+                  for (var i = 0; i < results2.length; i++) {
+                    var element = results2[i];
+                    if (!inArr(list2, element)) {
+                      list2.push(element);
+                    }
+                    if (type != IMPLICATION && !inArr(list1, element)) {
+                      list1.push(element);
+                    }
+                  }
+                }
+              
+                var queryText = 'select distinct * ' +
+                    'from binary_assertable b where ',
+                    params = [];
+                if (!noResults(list1)) {
+                  params.push(list1);
+                  queryText += '$' + params.length +
+                      ' && b.dependencies1 and ';
+                }
+                if (!noResults(list2)) {
+                  params.push(list2);
+                  queryText += '$' + params.length +
+                      ' && b.dependencies2 and ';
+                }
+                params.push(type);
+                queryText += '$' + params.length + ' = b.type';
+
+                query(queryText, params, function (results3) {
+
+                  if (noResults(results3)) {
+                    callback(undefined);
+                  } else {
+                    
+                    callback(extractIDs(results3));
+                  }
+                });
+              });
+            });
           }
         }
-        fetchOneAssertion();
+      }
+
+      if (!foundSomething) {
+        callback(undefined);
+      }
+    }
+  }
+}
+
+// TODO: actual searching
+// function searchJson (query, json, callback1) {
+
+//   // TODO: factor this out with the other traverse() function?
+//   function traverse (something, callback2) {
+
+//     var key = Object.keys(something)[0];
+
+//     if (inArr(groupConnectives, key)) {
+//       traverse(something[key][0], function (results1) {
+//         traverse(something[key][1], function (results2) {
+//           // TODO: combine the group results
+//           callback2(results1.concat(results2));
+//         });
+//       });
+
+//     } else if (inArr(groupTypes, key)) {
+//       searchAssertable(query, something[key], callback2);
+
+//     } else { // full citation
+//       // TODO: handle the citation information
+//     }
+
+//     traverse(json, callback1);
+// }
+
+
+
+/* search similar exact functions (retrieve records by (1) their
+   similarity to and (2) their exact matching with given data) */
+
+// TODO: split these up into two functions, searchSimilar() and
+// searchExact(), so that the contribution's insert() function
+// only has to call the exact version to avoid duplicated code
+
+// TODO: make the exact version of these functions return one thing
+// (instead of a list of things of exactly length one)
+
+// returns two id lists (similar and exact)
+function _searchSimilarExact (query, searchString, callback,
+    tableName, itemName, tsvColumn, nameColumn) {
+
+  query('select distinct * from '+tableName+' '+itemName+' where ' +
+      itemName+'.'+tsvColumn+' @@ to_tsquery(\'english\', $1)',
+      [addOrs(searchString)], function (similarResults) {
+
+    var returnSimilarResults;
+    if (noResults(similarResults)) {
+      returnSimilarResults = undefined;
+    } else {
+      returnSimilarResults = extractIDs(similarResults);
+    }
+
+    query('select distinct * from '+tableName+' '+itemName+
+        ' where '+itemName+'.'+nameColumn+' = $1',
+        [searchString], function (exactResults) {
+
+      var returnExactResults;
+      if (noResults(exactResults)) {
+        returnExactResults = undefined;
+      } else {
+        returnExactResults = extractIDs(exactResults);
+      }
+
+      callback(returnSimilarResults, returnExactResults);
+    });
+  });
+}
+
+// accepts string of a proposition, returns two id lists (similar and exact)
+function searchPropositionSimilarExact (query, searchArguments, callback) {
+  // TODO: refactor with searchProposition() ?
+  if (searchArguments.length != 1) {
+    callback(undefined, undefined);
+  } else {
+    _searchSimilarExact(query, searchArguments[0], callback,
+        'proposition', 'p', 'proposition_tsv', 'proposition');
+  }
+}
+
+// accepts string of a title, returns two id lists (similar and exact)
+function searchTitleSimilarExact (query, searchArguments, callback) {
+  if (searchArguments.length != 1) {
+    callback(undefined, undefined);
+  } else {
+    _searchSimilarExact(query, searchArguments[0], callback,
+        'source', 's', 'title_tsv', 'title');
+  }
+}
+
+// accepts string of a publisher, returns two id lists (similar and exact)
+function searchPublisherSimilarExact (query, searchArguments, callback) {
+  if (searchArguments.length != 1) {
+    callback(undefined, undefined);
+  } else {
+    _searchSimilarExact(query, searchArguments[0], callback,
+        'publisher', 'p', 'name_tsv', 'name');
+  }
+}
+
+// accepts strings of a person's name, returns two id lists (similar and exact)
+function searchPersonSimilarExact (query, searchArguments, callback) {
+  // TODO: refactor with _searchSimilarExact() ?
+
+  if (searchArguments.length != 2) {
+    callback(undefined, undefined);
+  } else {
+
+    var firstName = searchArguments[0],
+        lastName = searchArguments[1];
+
+    query('select distinct * from person p where ' +
+        'p.given_name_s_tsv @@ to_tsquery(\'english\', $1) ' +
+        'or p.surname_tsv @@ to_tsquery(\'english\', $2)',
+        [addOrs(firstName), addOrs(lastName)], function (similarResults) {
+
+      var returnSimilarResults;
+      if (noResults(similarResults)) {
+        returnSimilarResults = undefined;
+      } else {
+        returnSimilarResults = extractIDs(similarResults);
+      }
+
+      var newQueryString, newArguments;
+      if (empty(firstName)) {
+        newQueryString = 'p.given_name_s is null and p.surname = $1';
+        newArguments = [lastName];
+      } else {
+        newQueryString = 'p.given_name_s = $1 and p.surname = $2';
+        newArguments = [firstName, lastName];
+      }
+
+      query('select distinct * from person p where ' +
+          newQueryString, newArguments, function (exactResults) {
+
+        var returnExactResults;
+        if (noResults(exactResults)) {
+          returnExactResults = undefined;
+        } else {
+          returnExactResults = extractIDs(exactResults);
+        }
+
+        callback(returnSimilarResults, returnExactResults);
       });
     });
   }
+}
 
-  // (2) define the database interface (ie, the publicly available queries)
+
+
+/* search similar functions (retrieve records by their similarity 
+   to lists of given data; mainly for use during contribution) */
+
+// returns list of comments on similarity of propositions in json
+function searchForSimilar (query, listOfPropositions, citation, callback) {
+
+  if (noResults(listOfPropositions)) {
+    callback(undefined);
+  } else {
+
+    var commentsOnPropositions = [],
+        commentsOnCitationPeople = [],
+        commentsOnCitationOther = [],
+        citationKeys = Object.keys(citation);
+
+    function getSimilarTo () {
+
+      function searchSimple (searchFunction, fetchFunction,
+          searchArguments, typeString, whichComments) {
+
+        searchFunction(query, searchArguments,
+            function (similarIDs, exactIDs) {
+
+          if ((!noResults(similarIDs))&&(!noResults(exactIDs))) {
+            var exactID = exactIDs[0];
+            for (var i = 0; i < similarIDs.length; i++) {
+              if (similarIDs[i] == exactID) {
+                similarIDs.splice(i, 1);
+                break;
+              }
+            }
+          }
+
+          fetchListOfThings(query, fetchFunction,
+              similarIDs, function (similarResults) {
+            fetchListOfThings(query, fetchFunction,
+                exactIDs, function (exactResults) {
+
+              function flattenArguments (arguments) {
+                var result = '',
+                    first = true;
+                arguments.reverse();
+                arguments.forEach( function (argument) {
+                  if (first) {
+                    first = false;
+                  } else {
+                    result += ', ';
+                  }
+                  result += argument;
+                });
+                return result;
+              }
+
+              var exactResult = undefined;
+              if (!noResults(exactResults)) {
+                exactResult = exactResults[0];
+              }
+
+              whichComments.push({
+                'type': typeString,
+                'quote': flattenArguments(searchArguments),
+                'similar': similarResults,
+                'exact': exactResult
+              });
+
+              getSimilarTo();
+            });
+          });
+        });
+      }
+
+      if (listOfPropositions.length > 0) {
+
+        searchSimple(searchPropositionSimilarExact, fetchProposition,
+            [listOfPropositions.pop()], 'proposition', commentsOnPropositions);
+
+      } else {
+
+        if (citationKeys.length > 0) {
+
+          var key = citationKeys.pop();
+
+          if (key.includes('title')) {
+
+            searchSimple(searchTitleSimilarExact, fetchTitle,
+                [citation[key]], 'title', commentsOnCitationOther);
+
+          } else if (key.includes('publisher')) {
+
+            searchSimple(searchPublisherSimilarExact, fetchPublisher,
+                [citation[key]], 'publisher', commentsOnCitationOther);
+
+          } else if (key.includes('name')) {
+
+            var firstName, lastName, otherKey;
+            if (key.includes('given ')) {
+              firstName = key;
+              lastName = key.replace('given ', 'sur');
+              otherKey = lastName;
+            } else { // key.includes('sur')
+              firstName = key.replace('sur', 'given ');
+              lastName = key;
+              otherKey = firstName;
+            }
+
+            var otherKeyIndex = citationKeys.indexOf(otherKey);
+            if (otherKeyIndex != -1) {
+              citationKeys.splice(otherKeyIndex, 1);
+            }
+
+            searchSimple(searchPersonSimilarExact, fetchPerson,
+                [citation[firstName], citation[lastName]],
+                'person', commentsOnCitationPeople);
+
+          } else { // skip this key
+            getSimilarTo();
+          }
+
+        } else { // done!
+          commentsOnPropositions.reverse();
+          callback(commentsOnPropositions.concat(
+              commentsOnCitationOther, commentsOnCitationPeople));
+        }
+      }
+    }
+
+    getSimilarTo(); // start the process
+  }
+}
+
+
+
+/* translation functions */
+
+const EXPECTING = 1,
+      SOMETHING = 2;
+
+// this function operates like a Finite State Machine when parsing the input
+//   form data. there are additional operations occurring in this function,
+//   obviously, especially with regard to keeping track of the result of the
+//   translation throughout the parse, etc, however such book-keeping is
+//   relativity straightforward compared to the FSM, explained herein
+// definitions:
+//   states:
+//     E = expecting additional input
+//     S = something already parsed
+//     ? = error (ie, terminate)
+//   transitions:
+//     R = row / proposition
+//     U = unary operator
+//     B = binary operator
+//     ( = open parenthesis
+//     ) = close parenthesis
+// state transition matrix:
+//     E S
+//   R S ?
+//   U E ?
+//   B ? E
+//   ( E ?
+//   ) ? S
+
+function htmlFormToJson (queryObject, callback) {
+
+  if (noResults(queryObject)) {
+    callback(undefined);
+  } else {
+
+    var keys = Object.keys(queryObject),
+        errorMessages = [],
+        listOfPropositions = [],
+        listOfFullCitations = [],
+        json = {};
+
+    // handle one group at a time
+
+    var curGroup = 0;
+    function curGroupPrefix () {
+      return 'g' + curGroup;
+    }
+
+    while (true) {
+
+      curGroup++;
+
+      var curGroupKeys = [];
+      keys.forEach( function (key) {
+        if (inArr(key, curGroupPrefix())) {
+          curGroupKeys.push(key);
+        }
+      });
+
+      if (curGroupKeys.length > 0) {
+
+        var curGroupJson = undefined,
+            curGroupIsValid = true,
+            groupLocationKey = curGroupPrefix() + 'in',
+            groupLocation = parseInt(queryObject[groupLocationKey]),
+            groupLocationIsValid = true,
+            groupLocationWrapper = '';
+
+        if (groupLocation == undefined || isNaN(groupLocation)) {
+
+          groupLocationIsValid = false;
+
+        } else if (inArr(contentGroupLocations, groupLocation)) {
+
+          if (groupLocation == 1) {
+            groupLocationWrapper = 'assertion';
+          } else if (groupLocation == 2) {
+            groupLocationWrapper = 'premise';
+          } else if (groupLocation == 3) {
+            groupLocationWrapper = 'conclusion';
+          }
+
+          // see FSM explanation above
+          var state = EXPECTING,
+              curGroupJsonStack = [],
+              curRowOperators = [],
+              curRowOperatorsStack = [];
+
+          // handle one row in this group at a time
+
+          var curRow = 0;
+          function curRowPrefix () {
+            return curGroupPrefix() + 'r' + curRow;
+          }
+
+          while (true) {
+
+            curRow++;
+
+            var curRowKeys = [];
+            keys.forEach( function (key) {
+              if (inArr(key, curRowPrefix())) {
+                curRowKeys.push(key);
+              }
+            });
+
+            if (curRowKeys.length > 0) {
+
+              // handle one before in this row at a time
+
+              var curBefore = 0;
+              function curBeforePrefix () {
+                return curRowPrefix() + 'b' + curBefore;
+              }
+
+              while (true) {
+
+                curBefore++;
+
+                if (inArr(keys, curBeforePrefix())) {
+
+                  var before = parseInt(queryObject[curBeforePrefix()]);
+                  
+                  if (before == OPEN_PAREN) {
+
+                    if (state == EXPECTING) {
+
+                      curGroupJsonStack.push(curGroupJson);
+                      curGroupJson = undefined;
+
+                      curRowOperatorsStack.push(curRowOperators);
+                      curRowOperators = [];
+
+                    } else { // state == SOMETHING
+
+                      errorMessages.push('ERROR: Group ' + curGroup +
+                          ': Row ' + curRow + ': Unexpectedly ' +
+                          'encountered an open parenthesis.');
+                      curGroupIsValid = false;
+                      break;
+                    }
+
+                  } else if (inArr(unaryFormOps, before)) {
+
+                    var word = unaryTypeToWord[unaryFormToJsonType[before]];
+
+                    if (state == EXPECTING) {
+
+                      curRowOperators.push(['unary', word]);
+
+                    } else { // state == SOMETHING
+
+                      errorMessages.push('ERROR: Group ' + curGroup +
+                          ': Row ' + curRow + ': Unexpectedly encountered ' +
+                          'the unary operator "' + word + '".');
+                      curGroupIsValid = false;
+                      break;
+                    }
+
+                  } else if (inArr(binaryFormOps, before)) {
+
+                    var word = binaryTypeToWord[binaryFormToJsonType[before]];
+
+                    if (state == SOMETHING) {
+
+                      state = EXPECTING;
+                      curRowOperators.push(['binary', word]);
+
+                    } else { // state == EXPECTING
+
+                      errorMessages.push('ERROR: Group ' + curGroup +
+                          ': Row ' + curRow + ': Unexpectedly encountered ' +
+                          'the binary operator "' + word + '".');
+                      curGroupIsValid = false;
+                      break;
+                    }
+                  }
+
+                } else { // done with all befores in this row
+                  break;
+                }
+              }
+
+              if (!curGroupIsValid) {
+                break;
+              }
+
+              // handle the row itself
+
+              var curRowJson = undefined;
+              if (inArr(keys, curRowPrefix())) {
+                var newProposition = sanitize(queryObject[curRowPrefix()]);
+                listOfPropositions.push(newProposition);
+                curRowJson = {'proposition': newProposition};
+              }
+
+              function handleAllPrevOperators () {
+
+                while (curRowOperators.length > 0) {
+
+                  var curRowOperator = curRowOperators.pop();
+
+                  if (curRowOperator[0] == 'unary') {
+
+                    var newRowJson = {};
+                    newRowJson[curRowOperator[1]] = curRowJson;
+                    curRowJson = newRowJson;
+
+                  } else { // curRowOperator[0] == 'binary'
+
+                    var newRowJson = {};
+                    newRowJson[curRowOperator[1]] = [curGroupJson, curRowJson];
+                    curRowJson = newRowJson;
+                  }
+                }
+
+              }
+
+              if (state == EXPECTING) {
+
+                state = SOMETHING;
+
+                handleAllPrevOperators();
+                curGroupJson = curRowJson;
+
+              } else { // state == SOMETHING
+
+                errorMessages.push('ERROR: Group ' + curGroup + ': Row ' +
+                    curRow + ': Unexpectedly encountered this proposition.');
+                break;
+              }
+
+              // handle one after in this row at a time
+
+              var curAfter = 0;
+              function curAfterPrefix () {
+                return curRowPrefix() + 'a' + curAfter;
+              }
+
+              while (true) {
+
+                curAfter++;
+
+                if (inArr(keys, curAfterPrefix())) {
+
+                  var after = parseInt(queryObject[curAfterPrefix()]);
+                  
+                  if (after == CLOSE_PAREN) {
+
+                    if (state == SOMETHING &&
+                        curGroupJsonStack.length > 0 &&
+                        curRowOperatorsStack.length > 0) {
+
+                      curRowJson = curGroupJson;
+                      curGroupJson = curGroupJsonStack.pop();
+                      curRowOperators = curRowOperatorsStack.pop();
+
+                      handleAllPrevOperators();
+                      curGroupJson = curRowJson;
+
+                    } else {
+
+                      errorMessages.push('ERROR: Group ' + curGroup +
+                          ': Row ' + curRow + ': Unexpectedly ' +
+                          'encountered a close parenthesis.');
+                      curGroupIsValid = false;
+                      break;
+                    }
+                  }
+
+                } else { // done with all afters in this row
+                  break;
+                }
+              }
+
+              if (!curGroupIsValid) {
+                break;
+              }
+
+            } else { // done with all rows in this group
+              break;
+            }
+          }
+
+        } else if (inArr(basicCitationGroupLocations, groupLocation)) {
+
+          groupLocationWrapper = 'basic citation';
+
+          // handle the one-off information
+
+          var citationType = '';
+          if (groupLocation == 4) {
+            citationType = 'anywhere';
+          } else if (groupLocation == 5) {
+            citationType = 'author';
+          } else if (groupLocation == 6) {
+            citationType = 'title';
+          } else if (groupLocation == 7) {
+            citationType = 'year';
+          }
+
+          var newJson = {},
+              citationKey = curGroupPrefix() + 'r1';
+          if (inArr(keys, citationKey)) {
+            var value = sanitize(queryObject[citationKey]);
+            if (value != '') {
+              newJson[citationType] = value;
+            } else {
+              errorMessages.push('ERROR: Group ' + curGroup +
+                  ': This basic citation group is empty.');
+              curGroupIsValid = false;
+            }
+          } else {
+            newJson = undefined;
+          }
+
+          curGroupJson = newJson;
+
+        } else if (inArr(fullCitationGroupLocations, groupLocation)) {
+
+          groupLocationWrapper = 'full citation';
+          curGroupJson = {};
+
+          // handle all the people
+
+          var key = '',
+              value = '',
+              personID = 0;
+
+          while (true) {
+
+            personID++;
+
+            var foundSomething = false;
+
+            function doOnePerson (htmlKeyString, jsonString1, jsonString2) {
+              var key = curGroupPrefix() + htmlKeyString + 'n' + personID;
+              if (inArr(keys, key)) {
+                value = sanitize(queryObject[key]);
+                if (value != '') {
+                  key = jsonString1 + ' ' + personID + ' ' + jsonString2;
+                  curGroupJson[key] = value;
+                }
+                foundSomething = true;
+              }
+            }
+
+            doOnePerson('ag', 'author', 'given name');
+            doOnePerson('as', 'author', 'surname');
+            doOnePerson('eg', 'editor', 'given name');
+            doOnePerson('es', 'editor', 'surname');
+
+            if (!foundSomething) {
+              break;
+            }
+
+          }
+
+          // handle the one-off information
+
+          function doOneKey (htmlKey, jsonKey) {
+
+            if (jsonKey == undefined) {
+              jsonKey = htmlKey;
+            }
+
+            key = curGroupPrefix() + htmlKey;
+            if (inArr(keys, key)) {
+              value = sanitize(queryObject[key]);
+              if (value != '') {
+                curGroupJson[jsonKey] = value;
+              }
+            }
+
+          }
+
+          doOneKey('title');
+          doOneKey('publisher');
+          doOneKey('year');
+          doOneKey('volume');
+
+          key = curGroupPrefix() + 'source';
+          var missingCitationSource = false;
+          if (inArr(keys, key)) {
+
+            var citationSourceString = '',
+                citationSourceInt = parseInt(queryObject[key]);
+            if (citationSourceInt == 1) {
+              citationSourceString = 'monograph';
+            } else if (citationSourceInt == 2) {
+              citationSourceString = 'edited collection';
+            } else if (citationSourceInt == 3) {
+              citationSourceString = 'periodical';
+            } else {
+              missingCitationSource = true;
+            }
+
+            curGroupJson['source type'] = citationSourceString;
+
+          } else {
+            missingCitationSource = true;
+          }
+
+          if (missingCitationSource) {
+            curGroupIsValid = false;
+          }
+
+          listOfFullCitations.push(curGroupJson);
+
+        } else {
+
+          groupLocationIsValid = false;
+
+        }
+
+        // handle the group location
+
+        if (!groupLocationIsValid || groupLocationWrapper == '') {
+          errorMessages.push('ERROR: Group ' + curGroup +
+              ': No group location specified.');
+          curGroupIsValid = false;
+        }
+
+        var newJson = {};
+        newJson[groupLocationWrapper] = curGroupJson;
+        curGroupJson = newJson;
+
+        // handle the group connective
+
+        var curGroupAnd = curGroupPrefix() + 'and',
+            groupConnective = parseInt(queryObject[curGroupAnd]);
+
+        var connectiveWrapper = '';
+        if (groupConnective == 1 || groupConnective == 4) {
+          connectiveWrapper = 'group and';
+        } else if (groupConnective == 2 || groupConnective == 5) {
+          connectiveWrapper = 'group or';
+        } else if (groupConnective == 3 || groupConnective == 6) {
+          connectiveWrapper = 'group not';
+        }
+
+        if (connectiveWrapper == '') {
+          if (isNaN(groupConnective) && curGroup == 1) {
+            // this is fine (group 1 does not have a connective)
+          } else {
+            errorMessages.push('ERROR: Group ' + curGroup +
+                ': No group connective specified.');
+            curGroupIsValid = false;
+          }
+        } else {
+          var newJson = {};
+          newJson[connectiveWrapper] = [json, curGroupJson];
+          curGroupJson = newJson;
+        }
+
+        // lastly, add this group's json to the running total
+
+        if (curGroupIsValid) {
+          json = curGroupJson;
+        }
+
+      } else { // done with all groups
+        break;
+      }
+    }
+
+    callback(json, errorMessages, listOfPropositions, listOfFullCitations);
+  }
+}
+
+
+
+/* other miscellaneous validation and confirmation functions */
+
+function contributionValidation (json, errors, propositions, fullCitations) {
+
+  var propositionError = false;
+  propositions.forEach( function (proposition) {
+    if ((!propositionError) && empty(proposition)) {
+      errors.push('ERROR: At least one of your propositions is empty or ' +
+          'undefined. This is now allowed when contributing new content.');
+      propositionError = true;
+    }
+  });
+
+  if (fullCitations.length != 1) {
+    errors.push('ERROR: You must have exactly one ' +
+        'full citation when contributing new content.');
+
+  } else {
+
+    var citation = fullCitations[0];
+
+    if (empty(citation['title'])) {
+      errors.push('ERROR: Citation title not specified.');
+    }
+
+    if (empty(citation['publisher'])) {
+      errors.push('ERROR: Citation publisher not specified.');
+    }
+
+    var year = citation['year'];
+    if (empty(year)) {
+      errors.push('ERROR: Citation year not specified.');
+    } else if (isNaN(parseInt(year))) {
+      errors.push('ERROR: Citation year is not an integer.');
+    }
+
+    // returns the number of people of that kind
+    function testListOfPeople (personType) {
+      var personID = 1;
+      while (true) {
+        var surname = citation[personType + ' ' + personID + ' surname'],
+            givenName = citation[personType + ' ' + personID + ' given name'],
+            surnameEmpty = empty(surname),
+            givenNameEmpty = empty(givenName);
+        if (surnameEmpty && givenNameEmpty) {
+          return personID - 1;
+        } else if (surnameEmpty && !givenNameEmpty) {
+          errors.push('ERROR: While ' + personType + ' given name ' +
+              'is optional, ' + personType + ' surname is required.');
+        }
+        personID++;
+      }
+    }
+
+    var numAuthors = testListOfPeople('author');
+    if (numAuthors == 0) {
+      errors.push('ERROR: At least one author is required.');
+    }
+
+    var citationType = citation['source type'];
+    if (empty(citationType)) {
+      errors.push('ERROR: Citation type not specified.');
+
+    } else {
+
+      if (citationType == 'periodical') {
+        var volume = citation['volume'];
+        if (empty(volume)) {
+          errors.push('ERROR: Citation volume not specified.');
+        } else if (isNaN(parseInt(volume))) {
+          errors.push('ERROR: Citation volume is not an integer.');
+        }
+
+      } else if (citationType == 'edited collection') {
+        var numEditors = testListOfPeople('editor');
+        if (numEditors == 0) {
+          errors.push('ERROR: At least one editor is required.');
+        }
+      }
+    }
+  }
+
+  var foundAnEmpty = false,
+      numConclusions = 0,
+      numAssertion = 0,
+      numPremises = 0;
+
+  function findEmpties (something) {
+    if (empty(something)) {
+      foundAnEmpty = true;
+    } else if (typeof something == 'object') {
+      if (Array.isArray()) {
+        something.forEach( function (value) {
+          findEmpties(value);
+        });
+      } else {
+        Object.keys(something).forEach( function (key) {
+          if (key == 'conclusion') { numConclusions++; }
+          if (key == 'assertion') { numAssertion++; }
+          if (key == 'premise') { numPremises++; }
+          findEmpties(something[key]);
+        });
+      }
+    }
+  }
+
+  findEmpties(json);
+
+  if (foundAnEmpty && !propositionError) {
+    errors.push('ERROR: Something went wrong when parsing your query.');
+  }
+
+  if (numAssertion == 0) {
+    if (numConclusions != 1) {
+      errors.push('ERROR: Arguments must have exactly one conclusion.');
+    }
+  } else {
+    if (numPremises > 0 || numConclusions > 0) {
+      errors.push('ERROR: You may not submit assertions and ' +
+          'arguments at the same time.');
+    } else if (numAssertion > 1) {
+      errors.push('ERROR: You may only submit one assertion at a time.');
+    }
+  }
+}
+
+function contributionConfirmation (html, comments) {
+
+  var returnVal = {'valid': false};
+
+  if (noResults(html)) {
+    return returnVal;
+  } else {
+
+    for (var i = 1; i <= comments.length; i++) {
+      var key = 'yes' + i;
+      if (key in html) {
+        if (html[key] != '1') {
+          return returnVal;
+        }
+      } else {
+        return returnVal;
+      }
+    }
+
+    var low = 0;
+    if ('pagelow' in html) {
+      low = parseInt(html['pagelow']);
+      if (isNaN(low)) {
+        return returnVal;
+      }
+    } else {
+      return returnVal;
+    }
+
+    var high = 0;
+    if ('pagehigh' in html) {
+      high = parseInt(html['pagehigh']);
+      if (isNaN(high)) {
+        return returnVal;
+      }
+    } else {
+      return returnVal;
+    }
+
+    return {
+      'valid': true,
+      'low': low,
+      'high': high,
+    };
+  }
+}
+
+
+
+/* insertion functions
+   (note: by this point, i assume that the json IS valid) */
+
+function getID (entry) {
+  return entry[0].id;
+}
+
+function newListOfMetadataTags (query, callback) {
+  query('insert into list_of_metadata_tags values (default) ' +
+      'returning id', [], function (result) {
+    callback(getID(result));
+  });
+}
+
+function newListOfPeople (query, callback) {
+  query('insert into list_of_people values (default) ' +
+      'returning id', [], function (result) {
+    callback(getID(result));
+  });
+}
+
+function newListOfAssertables (query, callback) {
+  query('insert into list_of_assertables values (default) ' +
+      'returning id', [], function (result) {
+    callback(getID(result));
+  });
+}
+
+function newAssertable (query, type, userID, callback) {
+  query('insert into assertable values (default, $1, $2, \'now\') ' +
+      'returning id', [type, userID], function (result) {
+    callback(getID(result));
+  });
+}
+
+function getOrInsertPerson (query, first, last, userID, callback) {
+  searchPersonSimilarExact(query, [first, last], function (similar, exact) {
+    if (!noResults(exact)) {
+      // console.log('old person ' + exact[0]);
+      callback(exact[0]);
+    } else {
+      query('insert into person values (default, $1, default, ' +
+          '$2, default, -1, $3, \'now\') returning id',
+          [last, first, userID], function (result) {
+        // console.log('new person ' + getID(result));
+        callback(getID(result));
+      });
+    }
+  });
+}
+
+function insert (query, json, userID, pageLow, pageHigh, callback1) {
+
+  var citation = -1,
+      assertion = -1,
+      conclusion = -1,
+      premises = [];
+
+  function traverse (something, callback2) {
+
+    var key = Object.keys(something)[0];
+
+    if (inArr(groupConnectives, key)) {
+      // console.log('groupConnective: ' + key);
+      traverse(something[key][0], function () {
+        traverse(something[key][1], function () {
+          callback2();
+        });
+      });
+
+    } else if (inArr(groupTypes, key)) {
+      // console.log('groupType: ' + key);
+      traverse(something[key], function (result) {
+        if (key == 'assertion') {
+          assertion = result;
+        } else if (key == 'conclusion') {
+          conclusion = result;
+        } else if (key == 'premise') {
+          premises.push(result);
+        }
+        callback2();
+      });
+
+    } else if (inArr(unaryTypes, key)) {
+      // TODO: refactor to getOrInsertUnary()
+      // console.log('unaryType: ' + key);
+      traverse(something[key], function (result, dependencies) {
+        var type = unaryWordToType[key];
+        query('select distinct * from unary_assertable u where ' +
+            'u.assertable = $1 and u.type = $2',
+            [result, type], function (exact) {
+          if (!noResults(exact)) {
+            var exactID = getID(exact);
+            // console.log('old ' + key + ': ' + exactID);
+            callback2(exactID, dependencies.concat(exactID));
+          } else {
+            newAssertable(query, 1, userID, function (assertableID) {
+              query('insert into unary_assertable values ' +
+                  '($1, $2, $3, $4) returning id',
+                  [assertableID, type, result, dependencies],
+                  function (unaryID) {
+                var newID = getID(unaryID);
+                // console.log('new ' + key + ': ' + newID);
+                callback2(newID, dependencies.concat(newID));
+              });
+            });
+          }
+        });
+      });
+
+    } else if (inArr(binaryTypes, key)) {
+      // TODO: refactor to getOrInsertBinary()
+      // console.log('binaryType: ' + key);
+      traverse(something[key][0], function (result1, depend1) {
+        traverse(something[key][1], function (result2, depend2) {
+          var type = binaryWordToType[key];
+          query('select distinct * from binary_assertable b where ' +
+              'b.assertable1 = $1 and b.assertable2 = $2 and b.type = $3',
+              [result1, result2, type], function (exact) {
+            if (!noResults(exact)) {
+              var exactID = getID(exact);
+              // console.log('old ' + key + ': ' + exactID);
+              callback2(exactID, depend1.concat(depend2).concat(exactID));
+            } else {
+              newAssertable(query, 2, userID, function (assertableID) {
+                query('insert into binary_assertable values ' +
+                    '($1, $2, $3, $4, $5, $6) returning id',
+                    [assertableID, type, result1, result2, depend1, depend2],
+                    function (binaryID) {
+                  var newID = getID(binaryID);
+                  // console.log('new ' + key + ': ' + newID);
+                  callback2(newID, depend1.concat(depend2).concat(newID));
+                });
+              });
+            }
+          });
+        });
+      });
+
+    } else if (key == propositionType) {
+      // TODO: refactor to getOrInsertProposition()
+      var proposition = something[key];
+      // console.log('proposition: ' + proposition);
+      query('select distinct * from proposition p where p.proposition = $1',
+            [proposition], function (exact) {
+        if (!noResults(exact)) {
+          var exactID = getID(exact);
+          // console.log('old ' + key + ': ' + exactID);
+          callback2(exactID, [exactID]);
+        } else {
+          newListOfMetadataTags(query, function (listID) {
+            newAssertable(query, 3, userID, function (assertableID) {
+              query('insert into proposition values ' +
+                  '($1, $2, default, $3) returning id',
+                  [assertableID, proposition, listID],
+                  function (propositionID) {
+                var newID = getID(propositionID);
+                // console.log('new ' + key + ': ' + newID);
+                callback2(newID, [newID]);
+              });
+            });
+          });
+        }
+      });
+
+    } else if (key == fullCitationType) {
+      // TODO: refactor to getOrInsertFullCitation()?
+      // TODO: refactor ALL of the above to functions?
+      // console.log('fullCitation');
+
+      var fullCitation = something[key];
+
+      // handle the people
+
+      var authors = [], editors = [];
+      function doOnePerson (personType, personNum) {
+        var lastKey = personType + ' ' + personNum + ' surname',
+            firstKey = personType + ' ' + personNum + ' given name';
+        if (lastKey in fullCitation) {
+          var last = fullCitation[lastKey],
+              first = fullCitation[firstKey];
+          getOrInsertPerson(query, first, last, userID, function (id) {
+            if (personType == 'author') {
+              authors.push(id);
+            } else { // editor
+              editors.push(id);
+            }
+            doOnePerson(personType, personNum + 1);
+          });
+        } else {
+          if (personType == 'author') {
+            doOnePerson('editor', 1);
+          } else { // editor
+            doListOfPeople('author');
+          }
+        }
+      }
+
+      var authorsList, editorsList;
+      function doListOfPeople (personType) {
+
+        var list;
+        if (personType == 'author') {
+          list = authors;
+        } else { // editor
+          list = editors;
+        }
+
+        if (list.length > 0) {
+
+          var index = 1, listID;
+
+          // possibly create a new list
+
+          function addOnePersonToList () {
+            var personID = list.pop();
+            if (personID != undefined) {
+              query('insert into list_of_people_element values ($1, $2, $3)',
+                  [listID, index++, personID], function () {
+                addOnePersonToList();
+              });
+            } else {
+              if (personType == 'author') {
+                authorsList = listID;
+                doListOfPeople('editor');
+              } else { // editor
+                editorsList = listID;
+                handleSource();
+              }
+            }
+          }
+
+          function needNewListOfPeople () {
+            newListOfPeople(query, function (id) {
+              index = 1;
+              listID = id;
+              list.reverse();
+              // console.log('new list: ' + listID);
+              addOnePersonToList();
+            });
+          }
+
+          // but first, search for an existing list
+
+          var fromClause = 'select distinct * from ',
+              whereClause = 'where ';
+          list.forEach( function (person) {
+            var thisOne = 'e' + index,
+                prevOne = 'e' + (index - 1);
+            if (index > 1) {
+              fromClause += ', ';
+              whereClause += 'and '
+            }
+            fromClause += 'list_of_people_element ' + thisOne + ' ';
+            whereClause += thisOne + '.index = ' + index +
+                ' and ' + thisOne + '.person = ' + person + ' ';
+            if (index > 1) {
+              whereClause += 'and ' + thisOne + '.list = ' + prevOne + '.list ';
+            }
+            index++;
+          });
+          whereClause += 'and not exists (select * from list_of_people_element ' +
+              'x where x.list = e1.list and x.index = ' + index + ')';
+
+          query(fromClause + whereClause, [], function (result) {
+            if (!noResults(result)) {
+              // TODO: refactor getID() to take arbitrary arguments
+              listID = result[0].list;
+              list = [];
+              // console.log('old list: ' + listID);
+              addOnePersonToList();
+            } else {
+              needNewListOfPeople();
+            }
+          });
+
+        } else {
+          handleSource();
+        }
+      }
+
+      // handle the rest of the citation
+
+      var sourceID;
+      function handleSource () {
+
+        var sourceType = fullCitation['source type'],
+            title = fullCitation['title'];
+
+        if (sourceType == 'monograph') {
+          query('select distinct s.id from source s, monograph m where ' +
+              's.type = 1 and s.title = $1 and m.id = s.id', 
+              [title], function (result) {
+            if (!noResults(result)) {
+              sourceID = getID(result);
+              // console.log('old monograph: ' + sourceID);
+              handlePublisher();
+            } else {
+              query('insert into source values (default, 1, $1, default, $2, ' +
+                  '\'now\') returning id', [title, userID], function (id) {
+                sourceID = getID(id);
+                query('insert into monograph values ($1)',
+                    [sourceID], function () {
+                  // console.log('new monograph: ' + sourceID);
+                  handlePublisher();
+                });
+              });
+            }
+          });
+
+        } else if (sourceType == 'periodical') {
+          var volume = fullCitation['volume'];
+          query('select distinct s.id from source s, periodical p where ' +
+              's.type = 2 and s.title = $1 and p.id = s.id and p.volume = $2', 
+              [title, volume], function (result) {
+            if (!noResults(result)) {
+              sourceID = getID(result);
+              // console.log('old periodical: ' + sourceID);
+              handlePublisher();
+            } else {
+              query('insert into source values (default, 2, $1, default, $2, ' +
+                  '\'now\') returning id', [title, userID], function (id) {
+                sourceID = getID(id);
+                query('insert into periodical values ($1, $2)',
+                    [sourceID, volume], function () {
+                  // console.log('new periodical: ' + sourceID);
+                  handlePublisher();
+                });
+              });
+            }
+          });
+
+        } else { // edited collection
+          query('select distinct s.id from source s, edited_collection e where ' +
+              's.type = 3 and s.title = $1 and e.id = s.id and e.editors = $2', 
+              [title, editorsList], function (result) {
+            if (!noResults(result)) {
+              sourceID = getID(result);
+              // console.log('old edited collection: ' + sourceID);
+              handlePublisher();
+            } else {
+              query('insert into source values (default, 3, $1, default, $2, ' +
+                  '\'now\') returning id', [title, userID], function (id) {
+                sourceID = getID(id);
+                query('insert into edited_collection values ($1, $2)',
+                    [sourceID, editorsList], function () {
+                  // console.log('new edited collection: ' + sourceID);
+                  handlePublisher();
+                });
+              });
+            }
+          });
+        }
+      }
+
+      var publisherID;
+      function handlePublisher () {
+        var publisherName = fullCitation['publisher'];
+        query('select distinct * from publisher p where p.name = $1', 
+            [publisherName], function (result) {
+          if (!noResults(result)) {
+            publisherID = getID(result);
+            // console.log('old publisher: ' + publisherID);
+            handleWork();
+          } else {
+            query('insert into publisher values (default, $1, default, $2, ' +
+                '\'now\') returning id', [publisherName, userID], function (id) {
+              publisherID = getID(id);
+              // console.log('new publisher: ' + publisherID);
+              handleWork();
+            });
+          }
+        });
+      }
+
+      var workID;
+      function handleWork () {
+        var year = fullCitation['year'];
+        query('select distinct * from work w where w.authors = $1 and ' +
+            'w.year = $2 and w.source = $3 and w.publisher = $4', 
+            [authorsList, year, sourceID, publisherID], function (result) {
+          if (!noResults(result)) {
+            workID = getID(result);
+            // console.log('old work: ' + workID);
+            handleCitation();
+          } else {
+            query('insert into work values (default, $1, $2, ' +
+                '$3, $4, $5, \'now\') returning id', [authorsList, year,
+                sourceID, publisherID, userID], function (id) {
+              workID = getID(id);
+              // console.log('new work: ' + workID);
+              handleCitation();
+            });
+          }
+        });
+      }
+
+      function handleCitation () {
+        query('select distinct * from citation c where c.work = $1 and ' +
+            'c.page_range_low = $2 and c.page_range_high = $3', 
+            [workID, pageLow, pageHigh], function (result) {
+          if (!noResults(result)) {
+            citation = getID(result);
+            // console.log('old citation: ' + citation);
+            callback2();
+          } else {
+            query('insert into citation values (default, $1, $2, ' +
+                '$3, $4, \'now\') returning id', [workID, pageLow,
+                pageHigh, userID], function (id) {
+              citation = getID(id);
+              // console.log('new citation: ' + citation);
+              callback2();
+            });
+          }
+        });
+      }
+
+      // begin the full citation traversal
+      doOnePerson('author', 1);
+
+    }
+
+  }
+
+  // begin the json traversal
+  traverse(json, function () {
+
+    var claimID;
+    if (assertion != -1) { // assertion insertion
+      query('select distinct c.id from claim c, assertion a where c.type = 1 ' +
+          'and c.citation = $1 and a.id = c.id and a.assertable = $2', 
+          [citation, assertion], function (result) {
+        if (!noResults(result)) {
+          claimID = getID(result);
+          // console.log('old assertion: ' + claimID);
+          callback1(claimID);
+        } else {
+          query('insert into claim values (default, 1, $1, true, $2, ' +
+              '\'now\') returning id', [citation, userID], function (id) {
+            claimID = getID(id);
+            query('insert into assertion values ($1, $2)',
+                [claimID, assertion], function () {
+              // console.log('new assertion: ' + claimID);
+              callback1(claimID);
+            });
+          });
+        }
+      });
+
+    } else { // argument insertion
+
+      // TODO: factor out this code with the above list search code?
+
+      var index = 1, premisesListID;
+      function addOneAssertableToList () {
+        var premise = premises.pop();
+        if (premise != undefined) {
+          query('insert into list_of_assertables_element values ($1, $2, $3)',
+              [premisesListID, index++, premise], function () {
+            addOneAssertableToList();
+          });
+        } else {
+
+          // do the actual insertion
+          query('select distinct c.id from claim c, argument a where ' +
+              'c.type = 2 and c.citation = $1 and a.id = c.id and ' +
+              'a.conclusion = $2 and a.premises = $3', [citation,
+              conclusion, premisesListID], function (result) {
+            if (!noResults(result)) {
+              claimID = getID(result);
+              // console.log('old argument: ' + claimID);
+              callback1(claimID);
+            } else {
+              query('insert into claim values (default, 2, $1, true, $2, ' +
+                  '\'now\') returning id', [citation, userID], function (id) {
+                claimID = getID(id);
+                newListOfMetadataTags(query, function (metadataID) {
+                  query('insert into argument values ($1, $2, $3, $4)', [claimID,
+                      conclusion, premisesListID, metadataID], function () {
+                    // console.log('new argument: ' + claimID);
+                    callback1(claimID);
+                  });
+                });
+              });
+            }
+          });
+        }
+      }
+
+      function needNewListOfAssertables () {
+        newListOfAssertables(query, function (id) {
+          index = 1;
+          premisesListID = id;
+          // console.log('new list: ' + premisesListID);
+          addOneAssertableToList();
+        });
+      }
+
+      var fromClause = 'select distinct * from ',
+          whereClause = 'where ';
+      premises.forEach( function (premise) {
+        var thisOne = 'e' + index,
+            prevOne = 'e' + (index - 1);
+        if (index > 1) {
+          fromClause += ', ';
+          whereClause += 'and '
+        }
+        fromClause += 'list_of_assertables_element ' + thisOne + ' ';
+        whereClause += thisOne + '.assertable = ' + premise + ' ';
+        if (index > 1) {
+          whereClause += 'and ' + thisOne + '.list = ' + prevOne + '.list ';
+        }
+        index++;
+      });
+      whereClause += 'and not exists (select * from list_of_assertables_element ' +
+          'x where x.list = e1.list and x.index = ' + index + ')';
+
+      query(fromClause + whereClause, [], function (result) {
+        if (!noResults(result)) {
+          premisesListID = result[0].list;
+          premises = [];
+          // console.log('old list: ' + premisesListID);
+          addOneAssertableToList();
+        } else {
+          needNewListOfAssertables();
+        }
+      });
+    }
+  });
+}
+
+
+
+/* set-up the actual database interface */
+
+module.exports = function (environment, pg) {
+
+  /* streamline the process of connecting to the database */
+
+  function connectToDatabase (callback) {
+
+    pg.connect(environment.DATABASE_URL, function (error, client, done) {
+
+      function query (queryString, queryParameters, callback) {
+
+        client.query(queryString, queryParameters, function (error, result) {
+
+          if (logAllQueries) {
+            console.log(queryString + ' ' + JSON.stringify(queryParameters) +
+                ' => ' + JSON.stringify(result ? result.rows : ''));
+          }
+
+          if (error) {
+            console.log('ERROR (query): ' + error);
+            callback(undefined);
+
+          } else {
+            callback(result.rows);
+          }
+        });
+      }
+
+      if (error) {
+        console.log('ERROR (connectToDatabase): ' + error);
+
+      } else {
+        callback(query, done);
+      }
+    });
+  }
+
+  /* controller: view-to-model communication */
 
   return {
+
+    // TODO: remove before going live
+
+    fetchAssertable: function (assertableID, callback) {
+      connectToDatabase( function (query, done) {
+        fetchAssertable(query, assertableID, function (results) {
+          done();
+          callback(results);
+        });
+      });
+    },
+
+    fetchClaim: function (claimID, callback) {
+      connectToDatabase( function (query, done) {
+        fetchClaim(query, claimID, function (results) {
+          done();
+          callback(results);
+        });
+      });
+    },
+
+    searchProposition: function (searchString, callback) {
+      connectToDatabase( function (query, done) {
+        searchProposition(query, searchString, function (results) {
+          done();
+          callback(results);
+        });
+      });
+    },
+
+    searchAssertable: function (assertableJSON, callback) {
+      connectToDatabase( function (query, done) {
+        searchAssertable(query, assertableJSON, function (results) {
+          done();
+          callback(results);
+        });
+      });
+    },
+
+    parseForm: function (htmlForm, callback) {
+      connectToDatabase( function (query, done) {
+        htmlFormToJson(htmlForm, function (json,
+            errorMessages, listOfPropositions, listOfFullCitations) {
+          done();
+          callback({
+            'json': json,
+            'errorMessages': errorMessages,
+            'listOfPropositions': listOfPropositions,
+            'listOfFullCitations': listOfFullCitations,
+          });
+        });
+      });
+    },
+
+    // real functions (public api)
+
+    contribute: function (htmlForm, userID, callback) {
+
+      connectToDatabase( function (query, done) {
+
+        htmlFormToJson(htmlForm, function (json, errorMessages,
+            listOfPropositions, listOfFullCitations) {
+
+          contributionValidation(json, errorMessages,
+            listOfPropositions, listOfFullCitations);
+
+          if (errorMessages.length > 0) {
+            done();
+            callback({
+              'errors': errorMessages,
+            });
+
+          } else {
+
+            searchForSimilar(query, listOfPropositions,
+                listOfFullCitations[0], function (comments) {
+
+              var info = contributionConfirmation(htmlForm, comments);
+
+              if (info.valid == false) {
+                done();
+                callback({
+                  'json': json,
+                  'comments': comments,
+                });
+              } else {
+
+                insert(query, json, userID, info.low, 
+                    info.high, function (newID) {
+                  done();
+                  callback({
+                    'newID': newID,
+                  });
+                });
+              }
+            });
+          }
+        });
+      });
+    },
+
+    search: function (htmlForm, callback) {
+
+      // TODO: actual searching
+
+      // var json;
+      // if ('query' in htmlForm) {
+      //   json = {};
+      // } else {
+      //   htmlFormToJson(htmlForm, function (jsonResult) {
+      //     json = jsonResult;
+      //   });
+      // }
+
+      // connectToDatabase( function (query, done) {
+      //   searchJson(query, json, function (results) {
+      //     done();
+      //     callback(results);
+      //   });
+      // });
+
+      if ('query' in htmlForm) {
+        connectToDatabase( function (query, done) {
+          var results = 'basic search results:';
+          searchProposition(query, htmlForm['query'], function (ids) {
+            function getOne () {
+              var id = ids.pop();
+              if (id != undefined) {
+                fetchProposition(query, id, function (text) {
+                  results += '</br></br>' + text;
+                  getOne();
+                });
+              } else {
+                done();
+                callback(results);
+              }
+            }
+            getOne();
+          });
+        });
+      } else {
+        callback('advanced search coming soon!');
+      }
+
+    },
+
+    // old functions (from first database version)
+    // TODO later: refactor this (and the index file)
 
     getUserSpecializations: function (userType, callback) {
       connectToDatabase( function (query, done) { query('\
@@ -824,7 +2214,7 @@ module.exports = function (environment, pg) {
             callback(results[0]); }}); }); },
 
     // right now the default is to allow all new users to contribute
-    // todo: change to "false, false, true" after alpha phase is done
+    // TODO: change to "false, false, true" after alpha phase is done
     makeNewUser: function (google_id, legal_notice, surname, given_name_s,
         user_type, department, institution, academic_email_address,
         preferred_email_address, privacy_setting, contact_rate, 
@@ -858,993 +2248,6 @@ module.exports = function (environment, pg) {
                 institution], returnUserID); }}); }); }); }
       else { callback(false); }},
 
-    search: function (queryObj, callback) {
-      connectToDatabase( function (query, done) {
-        var basicQuery = queryObj['query'];
-        if (basicQuery) {
-          // basic search
-          var formattedQuery = addOrs(basicQuery),
-              allResultIDs = [];
-          // (1) search through the text of propositions
-          fetchResultsForProposition(query, formattedQuery,
-          function (propositionResults) {
-            // console.log('propositionResults = ' + JSON.stringify(propositionResults));
-            allResultIDs = allResultIDs.concat(propositionResults.arguments);
-            allResultIDs = allResultIDs.concat(propositionResults.assertions);
-            // (2) search for claims made by authors
-            query(searchClaimsByAuthor(1), [formattedQuery],
-                function (authorResults) {
-              allResultIDs = allResultIDs.concat(authorResults);
-              // (3) search for claims made in specific years
-              var numbersInQuery = [];
-              basicQuery.split(' ').forEach( function (term) {
-                var termAsNumber = parseInt(term);
-                if (!isNaN(termAsNumber)) {
-                  numbersInQuery.push(termAsNumber); }});
-              function searchAnotherYear () {
-                var year = numbersInQuery.pop();
-                if (year != undefined) {
-                  query(searchClaimsByYear(1), [year],
-                      function (yearResults) {
-                    allResultIDs = allResultIDs.concat(yearResults);
-                    searchAnotherYear(); }); }
-                else {
-                  done();
-                  // todo: refactor with advanced search code
-                  var allAssertions = [],
-                      allArguments = [];
-                  function doOneResult () {
-                    var result = allResultIDs.pop();
-                    // console.log('allResultIDs = ' + JSON.stringify(allResultIDs));
-                    // console.log('result = ' + JSON.stringify(result));
-                    if (result && result.id) {
-                      // todo: refactor to use non-child id's?
-                      fetchFullClaimByChildID(query, result.id, function (results) {
-                        allAssertions = allAssertions.concat(results.assertions);
-                        allArguments = allArguments.concat(results.arguments);
-                        doOneResult();
-                      });
-                    }
-                    else {
-                      done();
-                      callback({
-                        assertions: allAssertions,
-                        arguments: allArguments,
-                        query: basicQuery
-                      });
-                    }
-                  }
-                  doOneResult();
-                }
-              }
-              searchAnotherYear();
-            });
-          });
-        } else {
-          // advanced search
-          // console.log('advanced search');
-          logAllQueries = false;
-          var curGroup = 1,
-              curGroupPrefix = function () { return 'g' + curGroup; },
-              keys = Object.keys(queryObj),
-              resultsForGroup = {},
-              textForGroup = {};
-          function handleGroup () {
-            function doneWithThisGroup () {
-              curGroup++;
-              handleGroup(); }
-            var curGroupKeys = [];
-            keys.forEach( function (key) {
-              if (inArr(key, curGroupPrefix())) {
-                curGroupKeys.push(key); }});
-            if (curGroupKeys.length > 0) {
-              var groupTypeKey = curGroupPrefix() + 'in',
-                  groupType = parseInt(queryObj[groupTypeKey]);
-              if (groupType == undefined) {
-                // TODO: error handling
-                doneWithThisGroup();
-              } else if (inArr(contentGroupLocations, groupType)) {
-                // content search
+  };
+}
 
-                parseGroup(queryObj, curGroupKeys, curGroupPrefix,
-                    function (parseGroupResults) {
-                  var propQueries = parseGroupResults.propQueries,
-                      parseLogicResults = parseLogic(parseGroupResults),
-                      groupAsLogicString = parseLogicResults[0],
-                      queriesToString = parseLogicResults[1],
-                      requirements = parseLogicResults[2][0],
-                      dependencies = parseLogicResults[2][1],
-                      solvedIDs = parseLogicResults[2][2];
-
-                  var resultsFor = {};
-                  function getResultsFor (id) {
-                    if (id in resultsFor) {
-                      return Array.from(resultsFor[id]); }
-                    else { return []; }}
-                  function putResultsFor (id, results) {
-                    // console.log('  id = ' + JSON.stringify(id));
-                    (new Set(results)).forEach( function (value) {
-                      // console.log('    ' + value);
-
-                    });
-                    resultsFor[id] = new Set(results); }
-
-                  function searchOneProp (id, callback) {
-                    var propSearchText = propQueries[id],
-                        formattedText = addOrs(propSearchText);
-                    fetchAllParentsOfProposition(query, 
-                        formattedText, function (propResults) {
-                      putResultsFor(id, propResults);
-                      callback(id); }); }
-
-                  function searchOneRequirement (id, callback) {
-                    var requirement = requirements[id],
-                        op = requirement.op,
-                        left = requirement.left,
-                        right = requirement.right,
-                        resultsForLeft = getResultsFor(left),
-                        resultsForRight = getResultsFor(right);
-                    if (inArr(unaryOps, op)) {
-                      var opType = unaryToType[op];
-                      fetchAllParentsOfUnary(query, opType,
-                          resultsForRight, function (results) {
-                        putResultsFor(id, results);
-                        callback(id); }); }
-                    else if (inArr(binaryOps, op)) {
-                      var opType = binaryToType[op];
-                      if (opType != 3) { // implication
-                        var leftRightUnion = union(
-                            resultsForLeft, resultsForRight);
-                        resultsForLeft = leftRightUnion;
-                        resultsForRight = leftRightUnion; }
-                      fetchAllParentsOfBinary(query, opType, resultsForLeft,
-                          resultsForRight, function (results) {
-                        putResultsFor(id, results);
-                        callback(id); }); }
-                    else { /* TODO: error handling */ }}
-
-                  function searchAllThings (callback) {
-                    function searchOneThing (id) {
-                      var thingID = solvedIDs.pop();
-                      if (thingID != undefined) {
-                        thingID = parseInt(thingID);
-                        if (thingID in propQueries) {
-                          searchOneProp(thingID, searchOneThing); }
-                        else if (thingID in requirements) {
-                          searchOneRequirement(thingID, searchOneThing); }
-                        else if (thingID in dependencies) {
-                          var sourceID = dependencies[thingID].id;
-                          resultsFor[thingID] = resultsFor[sourceID];
-                          searchOneThing(thingID); }
-                        else { /* TODO: error handling */ }}
-                      else { callback(id); }}
-                    solvedIDs.reverse();
-                    searchOneThing(); }
-
-                  searchAllThings( function (last) {
-                    resultsForGroup[curGroup] = resultsFor[last];
-                    textForGroup[curGroup] = createQuerySummaryString(
-                        queriesToString, groupAsLogicString);
-                    // console.log('  resultsFor = ' + JSON.stringify(resultsFor));
-                    doneWithThisGroup();
-                  });
-
-                });
-
-              } else if (inArr(citationGroupLocations, groupType)) {
-                // citation search
-                // TODO NOW
-                doneWithThisGroup();
-
-              } else if (inArr(fullCitationGroupLocations, groupType)) {
-                var newQuery = searchClaimsByCitation(
-                    queryObj, keys, curGroupPrefix);
-                query(newQuery[0], newQuery[1], function (results) {
-                  // TODO NOW
-                  doneWithThisGroup();
-                });
-
-              }
-            } else {
-
-              var results,
-                  groupSearchText,
-                  searchText = lineReturn + 'Search results for the following ' +
-                  'query...' + lineBreak + 'Please ensure that this is a ' +
-                  'semantically correct interpretation of your intended query ' +
-                  '(ie, that the correct order of operations has been ' +
-                  'maintained, that no logical operators have been dropped ' +
-                  'due to incorrect grouping, etc).';
-
-              for (var i = 1; i < curGroup; i++) {
-
-                searchText += lineBreak + '<u>Group ' + i + '</u>' +
-                    lineReturn + textForGroup[i];
-
-                var thisGroupString = 'G' + i;
-                if (i == 1) {
-                  results = new Set(resultsForGroup[i]);
-                  groupSearchText = thisGroupString; }
-                else {
-                  var groupAndOp = parseInt(queryObj['g' + i + 'and']),
-                      groupOpFunction = undefined,
-                      groupOpString = undefined;
-                  if (inArr(groupAnds, groupAndOp)) {
-                    groupOpFunction = intersection;
-                    groupOpString = opToString[5]; }
-                  else if (inArr(groupOrs, groupAndOp)) {
-                    groupOpFunction = union;
-                    groupOpString = opToString[6]; }
-                  else if (inArr(groupNots, groupAndOp)) {
-                    groupOpFunction = difference;
-                    groupOpString = opToString[5] + opToString[2]; }
-                  else { /* TODO: error handling */ }
-                  if (groupOpFunction != undefined) {
-                    results = groupOpFunction(results, resultsForGroup[i]);
-                    var oldGroupSearchText;
-                    if (i == 2) { oldGroupSearchText = groupSearchText; }
-                    else { oldGroupSearchText = '(' + groupSearchText + ')'; }
-                    groupSearchText = oldGroupSearchText +
-                        groupOpString + thisGroupString; }}}
-
-              searchText += lineBreak + '<u>All Groups</u>' +
-                  lineReturn + groupSearchText + lineBreak;
-
-              // console.log('  resultsForGroup = ' + JSON.stringify(resultsForGroup));
-              // console.log('  results = ' + JSON.stringify(Array.from(results)));
-
-              var resultIDs = Array.from(results),
-                  allAssertions = [],
-                  allArguments = [];
-              function doOneResult () {
-                var result = resultIDs.pop();
-                if (result != undefined) {
-                  fetchFullClaimByChildID(query, result, function (results) {
-                    allAssertions = allAssertions.concat(results.assertions);
-                    allArguments = allArguments.concat(results.arguments);
-                    doOneResult();
-                  });
-                }
-                else {
-
-                  // console.log('allAssertions = ' + JSON.stringify(allAssertions));
-                  // console.log('allArguments = ' + JSON.stringify(allArguments));
-
-                  // done with all groups
-                  done();
-                  callback({
-                    assertions: allAssertions,
-                    arguments: allArguments,
-                    text: searchText,
-                    query: queryObj
-                  });
-
-                }
-              }
-              doOneResult();
-
-            }
-          }
-          handleGroup();
-        }
-      });
-    },
-
-    contribute: function (queryObj, userID, callback) {
-
-      const isThisExpected = lineBreak + 'Is this what you expected? (If ' +
-            'not, please carefully reread the text that you entered and ' +
-            'confirm that it is exactly what you intended.)',
-          perhapsYouMeant = lineBreak + 'Perhaps you meant one the following:',
-          isThisCorrect = 'CORRECT?';
-
-      if (queryObj == undefined) {
-        callback(undefined); }
-      connectToDatabase( function (query, done) {
-        // TODO: refactor this query object traversal with search()
-        var curGroup = 1,
-            curGroupPrefix = function () { return 'g' + curGroup; },
-            keys = Object.keys(queryObj),
-            returnInfo = [],
-            numCorrect = 0,
-            pushIsThisCorrect = function (additionalInfo) {
-              returnInfo.push(isThisCorrect + additionalInfo);
-              numCorrect++; },
-            // contribution bookkeeping
-            numAssertions = 0,
-            numPremises = 0,
-            numConclusions = 0,
-            numCitations = 0,
-            premisesText = [],
-            conclusionText = undefined,
-            // content bookkeeping
-            groupLocations = {},
-            groupPropQueries = {},
-            groupSolvedIDs = {},
-            groupLogicalRequirements = {},
-            groupLogicalDependencies = {},
-            // citation bookkeeping
-            citationID = undefined,
-            authors = undefined,
-            editors = undefined,
-            title = undefined,
-            publisher = undefined,
-            year = undefined,
-            volume = undefined,
-            sourceType = undefined,
-            // other high-level variables
-            allPropSearchText = [];
-        function handleGroup () {
-          function nextGroup () {
-            curGroup++;
-            handleGroup(); }
-          var curGroupKeys = [];
-          keys.forEach( function (key) {
-            if (inArr(key, curGroupPrefix())) {
-              curGroupKeys.push(key); }});
-          if (curGroupKeys.length > 0) {
-            var groupTypeKey = curGroupPrefix() + 'in',
-                groupType = parseInt(queryObj[groupTypeKey]);
-            if (groupType == undefined || isNaN(groupType)) {
-              returnInfo.push('ERROR: Group ' + curGroup + ' location missing.');
-              pushIsThisCorrect('no');
-              nextGroup();
-            } else if (inArr(contentGroupLocations, groupType)) {
-              // content search
-
-              groupLocations[curGroup] = groupType;
-
-              if (groupType == 1) {
-                numAssertions++; }
-              else if (groupType == 2) {
-                numPremises++; }
-              else if (groupType == 3) {
-                numConclusions++; }
-
-              parseGroup(queryObj, curGroupKeys,
-                  curGroupPrefix, function (parseResults) {
-                var propQueries = parseResults.propQueries;
-                groupPropQueries[curGroup] = propQueries;
-
-                var propKeys = Object.keys(propQueries);
-                propKeys.reverse();
-                function searchOneProp () {
-                  var prop = propKeys.pop();
-                  if (prop != undefined) {
-                    var propID = parseInt(prop),
-                        propSearchText = propQueries[propID],
-                        formattedText = addOrs(propSearchText);
-                    if (inArr(allPropSearchText, propSearchText)) {
-                      searchOneProp();
-                    } else {
-                      allPropSearchText.push(propSearchText);
-                      query('select distinct * from proposition p \
-                          where p.proposition = $1', [propSearchText],
-                          function (exactResults) {
-                        query(searchPropositionsByString(1),
-                            [formattedText], function (similarResults) {
-
-                          var textToAdd = '"' + propSearchText + '"' + lineBreak;
-                          if (exactResults.length == 1) {
-                            textToAdd += 'There is 1 proposition in the ' +
-                            'database that exactly matches this text.'; }
-                          else { // exactResults.length == 0
-                            textToAdd += 'There are 0 propositions in the ' +
-                            'database that exactly match this text.'; }
-                          textToAdd += isThisExpected;
-
-                          if (similarResults.length > 0) {
-                            textToAdd += perhapsYouMeant;
-                            similarResults.forEach( function (result) {
-                              textToAdd += lineReturn + result.proposition; });
-                            returnInfo.push(textToAdd); }
-                          else {
-                            returnInfo.push(textToAdd); }
-
-                          if (exactResults.length == 1) {
-                            pushIsThisCorrect('oldProp'); }
-                          else { // exactResults.length == 0
-                            pushIsThisCorrect('newProp'); }
-
-                          searchOneProp();
-                        });
-                      });
-                    }
-                  } else {
-                    var parseLogicResults = parseLogic(parseResults),
-                        groupAsLogicString = parseLogicResults[0],
-                        queriesToString = parseLogicResults[1];
-                    groupLogicalRequirements[curGroup] = parseLogicResults[2][0];
-                    groupLogicalDependencies[curGroup] = parseLogicResults[2][1];
-                    groupSolvedIDs[curGroup] = parseLogicResults[2][2];
-                    var textToAdd = 'Group ' + curGroup + ' Overview' + 
-                        lineBreak + 'Now it\'s time to evaluate the semantic ' +
-                        'interpretation of this group. Please carefully read ' +
-                        'the following propositional logic to confirm that it ' +
-                        'correctly and exactly represents your query (ie, the ' +
-                        'intended order of operations has been maintained, no ' +
-                        'logical operators have been dropped because of ' +
-                        'incorrect semantic grouping, etc).' + lineBreak;
-                    var summaryString = createQuerySummaryString(
-                        queriesToString, groupAsLogicString);
-                    textToAdd += summaryString;
-                    returnInfo.push(textToAdd);
-                    pushIsThisCorrect('logic');
-
-                    if (groupType == 2) {
-                      premisesText.push(summaryString); }
-                    else if (groupType == 3) {
-                      conclusionText = summaryString; }
-
-                    nextGroup();
-                  }
-                }
-                searchOneProp();
-              });
-            } else if (inArr(fullCitationGroupLocations, groupType)) {
-
-              numCitations++;
-
-              var citationIsValid = true,
-                  searchQuery = searchCitations(queryObj,
-                      keys, curGroupPrefix, true);
-              logAllQueries = true;
-              query(searchQuery[0], searchQuery[1], function (exactResults) {
-                logAllQueries = false;
-
-                var queryInfo = searchQuery[2];
-                authors = queryInfo.authors;
-                editors = queryInfo.editors;
-                title = queryInfo.title;
-                publisher = queryInfo.publisher;
-                year = queryInfo.year;
-                volume = queryInfo.volume;
-                sourceType = queryInfo.sourceType;
-                var people = authors.concat(editors),
-                    similarResults = '';
-                people.reverse();
-
-                function appendSimilarResults (similarThings, columnName) {
-                  if (similarThings.length == 0) {
-                    similarResults += lineReturn + 'no results'; }
-                  else {
-                    similarThings.forEach( function (similarThing) {
-                      similarResults += lineReturn +
-                          similarThing[columnName]; }); }}
-
-                function doOnePerson () {
-                  var person = people.pop();
-                  if (person != undefined) {
-                    var lastName = person.sn,
-                        firstName = person.gn;
-                    if (!isDefined(lastName)) {
-                      citationIsValid = false;
-                      similarResults += lineBreak + 
-                          'All people require surnames!' }
-                    function doOneName (name, columnName, callback) {
-                      if (isDefined(name)) {
-                        query('select distinct * from person p where p.' +
-                            columnName +'_tsv @@ to_tsquery($1)',
-                            [addOrs(name)], function (nameResults) {
-                              similarResults += lineBreak +
-                                  'names similar to "' + name + '": ';
-                              appendSimilarResults(nameResults, columnName);
-                              callback(); }); }
-                      else { callback(); }}
-                    doOneName(lastName, 'surname', function () {
-                      doOneName(firstName, 'given_name_s', doOnePerson); }); }
-                  else { // done with all people
-
-                    var textToAdd = '',
-                        thingToPush = undefined;
-                    if (exactResults == undefined) {
-                      pushIsThisCorrect('no');
-                      textToAdd += 'ERROR: There was a problem searching the ' +
-                          'database for matching citations. (Perhaps your year ' +
-                          'field is not a number and thus the wrong type, or ' +
-                          'there are invisible characters in text that you ' +
-                          'copied and pasted from another source, etc?)';
-                    } else if (!citationIsValid) {
-                      pushIsThisCorrect('no');
-                      textToAdd += 'ERROR: This citation is invalid.';
-                    } else if (exactResults.length == 1) {
-                      citationID = exactResults[0].id;
-                      textToAdd += 'There is 1 citation in the database that ' +
-                          'exactly matches your criteria. Please confirm that ' +
-                          'this is the correct citation (as opposed to a different ' +
-                          'citation than the one you intended, but which matched ' +
-                          'anyways because your criteria are underspecified).';
-                      // TODO NOW: get the full citation
-                      thingToPush = 'oldCite';
-                    } else {
-                      textToAdd += 'There are ' + exactResults.length + ' ' + 
-                          'citations in the database that match your criteria. ' +
-                          'Do you want to create a new citation with these ' +
-                          'specifications, or are your criteria underspecified ' +
-                          '(ie, your title is correct but you left off one person ' +
-                          'from the authors list of the actual citation, etc)?';
-                      thingToPush = 'newCite';
-                    }
-
-                    textToAdd += perhapsYouMeant + similarResults;
-                    returnInfo.push(textToAdd);
-                    if (thingToPush != undefined) {
-                      pushIsThisCorrect(thingToPush); }
-
-                    nextGroup();
-
-                  }
-                }
-
-                query('select distinct * from source s where s.title_tsv @@ ' +
-                    'to_tsquery($1)', [addOrs(title)], function (titleResults) {
-                  if (!isDefined(title)) {
-                    citationIsValid = false;
-                    similarResults += lineBreak + 'You have not specified ' +
-                        'a title! Titles are required!' }
-                  else {
-                    similarResults += lineBreak +
-                        'titles similar to "' + title + '": ';
-                    appendSimilarResults(titleResults, 'title'); }
-
-                  query('select distinct * from publisher p where ' +
-                      'p.name_tsv @@ to_tsquery($1)', [addOrs(publisher)], 
-                      function (publisherResults) {
-                    if (!isDefined(publisher)) {
-                      citationIsValid = false;
-                      similarResults += lineBreak + 'You have not specified ' +
-                          'a publisher! Publishers are required!' }
-                    else {
-                      similarResults += lineBreak +
-                          'publishers similar to "' + publisher + '": ';
-                      appendSimilarResults(publisherResults, 'name'); }
-
-                    if (authors.length == 0) {
-                      citationIsValid = false;
-                      similarResults += lineBreak + 'You have not specified ' +
-                          'any authors! Authors are required!' }
-                    if (sourceType == 2 && editors.length == 0) {
-                      citationIsValid = false;
-                      similarResults += lineBreak + 'You have not specified any ' +
-                          'editors! Editors are required for edited collections!' }
-                    if (!isDefined(year)) {
-                      citationIsValid = false;
-                      similarResults += lineBreak + 'You have not specified ' +
-                          'a year! A year is required!' }
-                    if (sourceType == 3 && !isDefined(volume)) {
-                      citationIsValid = false;
-                      similarResults += lineBreak + 'You have not specified ' +
-                          'a volume! A volume is required for periodicals!' }
-
-                    doOnePerson();
-
-                  });
-
-                });
-
-              });
-            }
-          } else { // done with all groups
-
-            // data validation
-
-            var informationIsValid = true,
-                usingAssertions = numAssertions > 0,
-                usingPremises = numPremises > 0,
-                usingConclusions = numConclusions > 0;
-
-            if (numCitations != 1) {
-              informationIsValid = false;
-              pushIsThisCorrect('no');
-              returnInfo.push('ERROR: You must have exactly one citation.'); }
-            
-            if (!(usingAssertions || usingPremises || usingConclusions)) {
-              informationIsValid = false;
-              pushIsThisCorrect('no');
-              returnInfo.push('ERROR: You have not submitted any content.'); }
-            else if (usingAssertions && (usingPremises || usingConclusions)) {
-              informationIsValid = false;
-              pushIsThisCorrect('no');
-              returnInfo.push('ERROR: You cannot contribute both assertions ' +
-                  'and arguments (premises and conclusions) at the same time.'); }
-            else if ((!usingAssertions) && (!(usingPremises
-                && usingConclusions) || (numConclusions != 1))) {
-              informationIsValid = false;
-              pushIsThisCorrect('no');
-              returnInfo.push('ERROR: All arguments must contain both ' +
-                  'premises and exactly one conclusion.'); }
-            else if (usingAssertions && (numAssertions > 1)) {
-              informationIsValid = false;
-              pushIsThisCorrect('no');
-              returnInfo.push('ERROR: You may only submit ' +
-                  'one assertion at a time.'); }
-
-            // argument overview
-            else if (!usingAssertions) {
-              var textToAdd = 'Argument Overview' + lineBreak + 'Lastly, ' +
-                  'it\'s time to evaluate the semantic interpretation of the ' +
-                  'argument as a whole. Please ensure that the individual ' +
-                  'assertions (which you have already checked and confirmed ' +
-                  'above) have been correctly combined into an argument (ie, ' +
-                  'correctly marked as premises vs conclusion, that the argument ' +
-                  'ought not be further broken down into sub-arguments, etc).';
-              premisesText.forEach( function (text) {
-                textToAdd += lineBreak + 'PREMISE' + lineReturn + text; });
-              textToAdd += lineBreak + 'CONCLUSION' + lineReturn + conclusionText;
-              returnInfo.push(textToAdd);
-              pushIsThisCorrect('logic'); }
-
-            var confirmation = false,
-                pageLow = parseInt(queryObj['pagelow']),
-                pageHigh = parseInt(queryObj['pagehigh']);
-            if (informationIsValid) {
-              confirmation = true;
-              // TODO: replace numCorrect with a list of confirmation types
-              // (reuse the strings passed to pushIsThisCorrect, add values
-              // to the web form for each one, make sure they match)
-              for (var i = 1; i <= numCorrect; i++) {
-                if (parseInt(queryObj['yes' + i]) != 1) {
-                  confirmation = false; }}
-              if (isNaN(pageLow) || isNaN(pageHigh)) {
-                confirmation = false; }}
-
-            // console.log(' ');
-            // console.log('groupLocations = ' + JSON.stringify(groupLocations));
-            // console.log('groupPropQueries = ' + JSON.stringify(groupPropQueries));
-            // console.log('groupSolvedIDs = ' + JSON.stringify(groupSolvedIDs));
-            // console.log('groupLogicalRequirements = ' + 
-            //     JSON.stringify(groupLogicalRequirements));
-            // console.log('groupLogicalDependencies = ' + 
-            //     JSON.stringify(groupLogicalDependencies));
-            // console.log('citationID = ' + JSON.stringify(citationID));
-            // console.log('authors = ' + JSON.stringify(authors));
-            // console.log('editors = ' + JSON.stringify(editors));
-            // console.log('title = ' + JSON.stringify(title));
-            // console.log('publisher = ' + JSON.stringify(publisher));
-            // console.log('year = ' + JSON.stringify(year));
-            // console.log('volume = ' + JSON.stringify(volume));
-            // console.log('sourceType = ' + JSON.stringify(sourceType));
-            // console.log('pageLow = ' + JSON.stringify(pageLow));
-            // console.log('pageHigh = ' + JSON.stringify(pageHigh));
-            // console.log(' ');
-
-            if (!confirmation) {
-
-              done();
-              callback(returnInfo); }
-
-            else {
-
-              logAllQueries = true;
-
-              function getOrInsert (getQuery, getParams, 
-                  insertQuery, insertParams, callback) {
-                query(getQuery, getParams, function (getResults) {
-                  if (getResults && getResults.length == 1) {
-                    callback(getResults[0].id, false); }
-                  else { query(insertQuery, insertParams, 
-                      function (insertResults) {
-                    if (insertResults != undefined &&
-                        insertResults[0] != undefined) {
-                      callback(insertResults[0].id, true); }
-                    else { callback(insertResults, true); }}); }}); }
-
-              function getOrInsertCitation (citationCallback) {
-                if (citationID != undefined) {
-                  citationCallback(); }
-                else {
-
-                  function getOrInsertPerson (person, callback) {
-                    var lastName = person.sn,
-                        firstName = person.gn,
-                        getQuery = 'select * from person p where p.surname = $1',
-                        getParams = [lastName],
-                        firstNameIsDefined = false;
-                    if (isDefined(firstName)) {
-                      firstNameIsDefined = true;
-                      getQuery += ' and p.given_name_s = $2';
-                      getParams.push(firstName); }
-                    var insertQuery = 'insert into person values (default, $1, ' +
-                        'default, ' + (firstNameIsDefined ? '$2' : 'null') + 
-                        ', default, ' + 'null, ' + (firstNameIsDefined ? '$3' :
-                        '$2') + ', \'now\') returning id;',
-                        insertParams = [];
-                    getParams.forEach( function (param) {
-                      insertParams.push(param); });
-                    insertParams.push(userID);
-                    getOrInsert(getQuery, getParams, 
-                        insertQuery, insertParams, callback); }
-
-                  function doPeopleList (peopleList, callback) {
-                    var newPeopleList = [];
-                    function doOnePerson () {
-                      var person = peopleList.pop();
-                      if (person != undefined) {
-                        getOrInsertPerson(person, function (personID) {
-                          person.id = personID;
-                          newPeopleList.push(person);
-                          doOnePerson(); }); }
-                      else {
-                        newPeopleList.reverse();
-                        query('insert into list_of_people values (default) ' +
-                            'returning id', [], function (peopleListID) {
-                          peopleListID = peopleListID[0].id;
-                          var valuesToAdd = '',
-                              valueParams = [],
-                              valueIndex = 1,
-                              listIndex = 1,
-                              first = true;
-                          newPeopleList.forEach( function (person) {
-                            if (first) { first = false; }
-                            else { valuesToAdd += ', '; }
-                            valuesToAdd += '($' + (valueIndex++) + ', $' +
-                                (valueIndex++) + ', $' + (valueIndex++) + ')';
-                            valueParams.push(peopleListID);
-                            valueParams.push(listIndex++);
-                            valueParams.push(person.id); });
-                          query('insert into list_of_people_element values ' + 
-                              valuesToAdd, valueParams, function () {
-                            callback(peopleListID); }); }); }}
-                    doOnePerson(); }
-
-                  doPeopleList(authors, function (authorsListID) {
-                    doPeopleList(editors, function (editorsListID) {
-                      // console.log('authorsListID = ' + JSON.stringify(authorsListID));
-                      // console.log('editorsListID = ' + JSON.stringify(editorsListID));
-
-                      function getOrInsertSource (callback) {
-                        getOrInsert('select * from source s where s.type = $1 ' +
-                            'and s.title = $2', [sourceType, title], 'insert ' +
-                            'into source values (default, $1, $2, default, $3, ' +
-                            '\'now\') returning id', [sourceType, title, userID],
-                            function (sourceID, inserted) {
-                          if (inserted) {
-                            if (sourceType == 1) {
-                              query('insert into monograph values ($1)',
-                                  [sourceID], function () {
-                                callback(sourceID); }); }
-                            else if (sourceType == 2) {
-                              query('insert into edited_collection values ($1, $2)',
-                                  [sourceID, editorsListID], function () {
-                                callback(sourceID); }); }
-                            else if (sourceType == 3) {
-                              query('insert into periodical values ($1, $2)',
-                                  [sourceID, volume], function () {
-                                callback(sourceID); }); }
-                            else { /* TODO: error handling */ }}
-                          else { callback(sourceID); }}); }
-
-                      getOrInsertSource( function (sourceID) {
-                        // console.log('sourceID = ' + JSON.stringify(sourceID));
-
-                        getOrInsert('select * from publisher p where p.name = $1',
-                            [publisher], 'insert into publisher values (default, ' +
-                            '$1, default, $2, \'now\') returning id', [publisher,
-                            userID], function (publisherID) {
-                          // console.log('publisherID = ' + JSON.stringify(publisherID));
-
-                          getOrInsert('select * from work w where w.source = $1 ' +
-                              'and w.publisher = $2 and w.year = $3', [sourceID,
-                              publisherID, year], 'insert into work values (' +
-                              'default, $1, $2, $3, $4, $5, \'now\') ' +
-                              'returning id', [authorsListID, year, sourceID,
-                              publisherID, userID], function (workID) {
-                            // console.log('workID = ' + JSON.stringify(workID));
-
-                            getOrInsert('select * from citation c where c.work ' +
-                                '= $1 and c.page_range_low = $2 and ' +
-                                'c.page_range_high = $3', [workID, pageLow,
-                                pageHigh], 'insert into citation values (' +
-                                'default, $1, $2, $3, $4, \'now\') returning id',
-                                [workID, pageLow, pageHigh, userID],
-                                function (newCitationID) {
-
-                              citationID = newCitationID;
-                              citationCallback();
-
-                            });
-                          });
-                        });
-                      });
-                    });
-                  });
-                }
-              }
-
-              getOrInsertCitation( function () {
-                // console.log('citationID = ' + JSON.stringify(citationID));
-
-                function newListOfMetadataTags (metadataCallback) {
-                  query('insert into list_of_metadata_tags values (default) ' +
-                      'returning id', [], function (listID) {
-                    metadataCallback(listID[0].id); }); }
-
-                var groups = Object.keys(groupLocations),
-                    premises = [],
-                    conclusion = -1;
-                function doOneGroup () {
-                  var group = groups.pop(),
-                      lastAssertable = undefined;
-                  if (group != undefined) {
-                    // console.log('group = ' + JSON.stringify(group));
-                    var assertables = groupSolvedIDs[group],
-                        assertableToDBID = {},
-                        propQueries = groupPropQueries[group],
-                        requirements = groupLogicalRequirements[group],
-                        dependencies = groupLogicalDependencies[group];
-                    assertables.reverse();
-                    function doOneAssertable () {
-                      var assertable = assertables.pop();
-                      if (assertable != undefined) {
-                        lastAssertable = assertable;
-                        // console.log('assertable = ' + JSON.stringify(assertable));
-                        if (assertable in propQueries) {
-                          var propText = propQueries[assertable];
-                          getOrInsert('select distinct * from proposition p ' +
-                              'where p.proposition = $1', [propText], 
-                              'insert into assertable values ' +
-                              '(default, 3, $1, \'now\') returning id',
-                              [userID], function (assertableID, inserted) {
-                            assertableToDBID[assertable] = assertableID;
-                            if (inserted) {
-                              newListOfMetadataTags( function (listID) {
-                                query('insert into proposition values ($1, $2, ' +
-                                    'default, $3)', [assertableID, propText,
-                                    listID], function () {
-                                  doOneAssertable();
-                                });
-                              });
-                            } else {
-                              doOneAssertable();
-                            }
-                          });
-                        }
-                        else if (assertable in requirements) {
-                          var requirement = requirements[assertable],
-                              op = requirement.op,
-                              left = requirement.left,
-                              leftID = assertableToDBID[left],
-                              right = requirement.right,
-                              rightID = assertableToDBID[right];
-                          if (inArr(unaryOps, op)) {
-                            var dbType = unaryToType[op];
-                            getOrInsert('select distinct * from unary_assertable ' +
-                                'u where u.type = $1 and u.assertable = $2',
-                                [dbType, rightID], 'insert into assertable values ' +
-                                '(default, 1, $1, \'now\') returning id',
-                                [userID], function (assertableID, inserted) {
-                              assertableToDBID[assertable] = assertableID;
-                              if (inserted) {
-                                query('insert into unary_assertable values ' +
-                                    '($1, $2, $3)', [assertableID, dbType,
-                                    rightID], function () {
-                                  doOneAssertable();
-                                });
-                              }
-                              else {
-                                doOneAssertable();
-                              }
-                            });
-                          }
-                          else if (inArr(binaryOps, op)) {
-                            var dbType = binaryToType[op];
-                            getOrInsert('select distinct * from binary_assertable ' +
-                                'b where b.type = $1 and b.assertable1 = $2 ' +
-                                'and b.assertable2 = $3', [dbType, leftID, rightID],
-                                'insert into assertable values ' +
-                                '(default, 2, $1, \'now\') returning id',
-                                [userID], function (assertableID, inserted) {
-                              assertableToDBID[assertable] = assertableID;
-                              if (inserted) {
-                                query('insert into binary_assertable values ' +
-                                    '($1, $2, $3, $4)', [assertableID, dbType,
-                                    leftID, rightID], function () {
-                                  doOneAssertable();
-                                });
-                              }
-                              else {
-                                doOneAssertable();
-                              }
-                            });
-                          }
-                          else {
-                            // TODO: error handling
-                          }
-                        }
-                        else if (assertable in dependencies) {
-                          assertableToDBID[assertable] = 
-                              assertableToDBID[dependencies[assertable].id];
-                          doOneAssertable();
-                        } else {
-                          // TODO: error handling
-                        }
-                      }
-                      else {
-                        // console.log('assertableToDBID = ' + JSON.stringify(assertableToDBID));
-                        var location = groupLocations[group],
-                            lastAssertableID = assertableToDBID[lastAssertable];
-                        if (location == 1) {
-                          getOrInsert('select distinct * from claim c, assertion ' +
-                              'a where c.citation = $1 and a.assertable = $2 and ' +
-                              'a.id = c.id', [citationID, lastAssertableID],
-                              'insert into claim values (default, 1, $1, 5, ' +
-                              'true, $2, \'now\') returning id', [citationID,
-                              userID], function (claimID, inserted) {
-                            if (inserted) {
-                              query('insert into assertion values ($1, $2)',
-                                  [claimID, lastAssertableID], function () {
-                                doOneGroup();
-                              });
-                            } else {
-                              doOneGroup();
-                            }
-                          });
-                        }
-                        else if (location == 2) {
-                          premises.push(lastAssertableID);
-                          doOneGroup();
-                        }
-                        else if (location == 3) {
-                          conclusion = lastAssertableID;
-                          doOneGroup();
-                        } else {
-                          // TODO: error handling
-                        }
-                      }
-                    }
-                    doOneAssertable();
-                  }
-                  else {
-                    if (conclusion == -1) {
-                      // done!
-                      logAllQueries = false;
-                      callback('success');
-                    } else {
-                      // TODO: search for existing arguments
-                      // TODO: similarly, search through existing list_of_X
-                      // entries throughout this entire file (authors, etc)
-                      query('insert into claim values (default, 2, $1, 5, ' +
-                          'true, $2, \'now\') returning id', [citationID,
-                          userID], function (claimID) {
-                        claimID = claimID[0].id;
-                        query('insert into list_of_assertables values ' +
-                            '(default) returning id', [], function (listID) {
-                          listID = listID[0].id;
-                          var premiseNum = 1;
-                          function doOnePremise () {
-                            var premise = premises.pop();
-                            if (premise != undefined) {
-                              query('insert into list_of_assertables_element ' +
-                                  'values ($1, $2, $3)', [listID, premiseNum++,
-                                  premise], function () {
-                                doOnePremise();
-                              });
-                            }
-                            else {
-                              newListOfMetadataTags( function (tagsID) {
-                                query('insert into argument values ($1, $2, $3, $4)',
-                                    [claimID, conclusion, listID, tagsID],
-                                    function () {
-                                  // done!
-                                  logAllQueries = false;
-                                  callback('success');
-                                });
-                              });
-                            }
-                          }
-                          doOnePremise();
-                        });
-                      });
-                    }
-                  }
-                }
-                doOneGroup();
-              });
-            }
-          }
-        }
-        handleGroup();
-      });
-    }
-
-}};

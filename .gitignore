@@ -1,3 +1,6 @@
 .env
 node_modules/
 public/stylesheets/*.css
+logs-*.txt
+*-OLD*
+.DS_Store
