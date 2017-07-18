@@ -2347,8 +2347,8 @@ module.exports = function (environment, pg) {
                 var allResults = {};
                 allResults.assertions = assertionResults.assertions;
                 allResults.arguments = argumentResults.arguments;
-                console.log('search results: one assertion: ' +
-                    JSON.stringify(allResults));
+                // console.log('search results: one assertion: ' +
+                //     JSON.stringify(allResults));
                 callbackMiddle(allResults);
               });
             });
