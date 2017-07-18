@@ -2183,15 +2183,15 @@ module.exports = function (environment, pg) {
 
       function doSearch (assertableJSON, callbackMiddle) {
 
-        console.log('doSearch(): assertableJSON = ' +
-            JSON.stringify(assertableJSON));
+        // console.log('doSearch(): assertableJSON = ' +
+        //     JSON.stringify(assertableJSON));
 
         connectToDatabase( function (query, done) {
 
           function doOneAssertionSearch (thingToSearch, callbackInner) {
 
             searchAssertable(query, thingToSearch, function (assertableIDs) {
-              console.log('assertableIDs = ' + assertableIDs);
+              // console.log('assertableIDs = ' + assertableIDs);
 
               if (assertableIDs == undefined) {
                 assertableIDs = [];
@@ -2201,7 +2201,7 @@ module.exports = function (environment, pg) {
               function getOneAssertable () {
                 var assertableID = assertableIDs.pop();
                 if (assertableID != undefined) {
-                  console.log('searching assertableID ' + assertableID);
+                  // console.log('searching assertableID ' + assertableID);
                   query('select distinct c.id from assertion c, ' +
                       'unary_assertable u, binary_assertable b ' +
                       'where (c.assertable = $1) or ($1 = any(u.dependencies) ' +
@@ -2216,7 +2216,7 @@ module.exports = function (environment, pg) {
                     function getOneAssertion () {
                       var assertionID = assertionIDs.pop();
                       if (assertionID != undefined) {
-                        console.log('fetchClaim ' + JSON.stringify(assertionID));
+                        // console.log('fetchClaim ' + JSON.stringify(assertionID));
                         fetchClaim(query, assertionID.id, function (assertionJSON) {
                           allAssertionJSON.push(assertionJSON);
                           getOneAssertion();
@@ -2230,8 +2230,8 @@ module.exports = function (environment, pg) {
 
                   });
                 } else {
-                  console.log('search results: assertions: ' +
-                      JSON.stringify(allAssertionJSON));
+                  // console.log('search results: assertions: ' +
+                  //     JSON.stringify(allAssertionJSON));
                   callbackInner({
                     'assertions': allAssertionJSON,
                     'arguments': []
@@ -2257,7 +2257,7 @@ module.exports = function (environment, pg) {
           function doOneArgumentSearch (thingToSearch, callbackInner) {
 
             searchAssertable(query, thingToSearch, function (assertableIDs) {
-              console.log('assertableIDs = ' + assertableIDs);
+              // console.log('assertableIDs = ' + assertableIDs);
 
               if (assertableIDs == undefined) {
                 assertableIDs = [];
@@ -2267,7 +2267,7 @@ module.exports = function (environment, pg) {
               function getOneAssertable () {
                 var assertableID = assertableIDs.pop();
                 if (assertableID != undefined) {
-                  console.log('searching assertableID ' + assertableID);
+                  // console.log('searching assertableID ' + assertableID);
                   query('select distinct c.id from argument c, ' +
                       'unary_assertable u, binary_assertable b, ' +
                       'list_of_assertables_element l ' +
@@ -2286,7 +2286,7 @@ module.exports = function (environment, pg) {
                     function getOneArgument () {
                       var argumentID = argumentIDs.pop();
                       if (argumentID != undefined) {
-                        console.log('fetchClaim ' + JSON.stringify(argumentID));
+                        // console.log('fetchClaim ' + JSON.stringify(argumentID));
                         fetchClaim(query, argumentID.id, function (assertionJSON) {
                           allArgumentsJSON.push(assertionJSON);
                           getOneArgument();
@@ -2300,8 +2300,8 @@ module.exports = function (environment, pg) {
 
                   });
                 } else {
-                  console.log('search results: arguments: ' +
-                      JSON.stringify(allArgumentsJSON));
+                  // console.log('search results: arguments: ' +
+                  //     JSON.stringify(allArgumentsJSON));
                   callbackInner({
                     'assertions': [],
                     'arguments': allArgumentsJSON
@@ -2372,8 +2372,8 @@ module.exports = function (environment, pg) {
                   allResults.arguments.push(argument); });
                 rightResults.arguments.forEach( function (argument) {
                   allResults.arguments.push(argument); });
-                console.log('search results: twoThings: ' +
-                    JSON.stringify(allResults));
+                // console.log('search results: twoThings: ' +
+                //     JSON.stringify(allResults));
                 callbackMiddle(allResults);
               });
             });
@@ -2384,7 +2384,7 @@ module.exports = function (environment, pg) {
       }
 
       if ('query' in htmlForm) {
-        doSearch({'proposition':htmlForm['query']}, callbackOuter);
+        doSearch({'assertion':{'proposition':htmlForm['query']}}, callbackOuter);
       } else {
         htmlFormToJson(htmlForm, function (json,
             errorMessages, listOfPropositions, listOfFullCitations) {
