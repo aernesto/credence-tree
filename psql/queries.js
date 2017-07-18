@@ -2218,7 +2218,17 @@ module.exports = function (environment, pg) {
                       if (assertionID != undefined) {
                         // console.log('fetchClaim ' + JSON.stringify(assertionID));
                         fetchClaim(query, assertionID.id, function (assertionJSON) {
-                          allAssertionJSON.push(assertionJSON);
+                          var i,
+                              toAdd = true,
+                              newID = assertionJSON.id;
+                          for (i = 0; i < allAssertionJSON.length; i++) {
+                            if (allAssertionJSON[i].id == newID) {
+                              toAdd = false;
+                            }
+                          }
+                          if (toAdd) {
+                            allAssertionJSON.push(assertionJSON);
+                          }
                           getOneAssertion();
                         });
                       } else {
@@ -2287,8 +2297,18 @@ module.exports = function (environment, pg) {
                       var argumentID = argumentIDs.pop();
                       if (argumentID != undefined) {
                         // console.log('fetchClaim ' + JSON.stringify(argumentID));
-                        fetchClaim(query, argumentID.id, function (assertionJSON) {
-                          allArgumentsJSON.push(assertionJSON);
+                        fetchClaim(query, argumentID.id, function (argumentJSON) {
+                          var i,
+                              toAdd = true,
+                              newID = argumentJSON.id;
+                          for (i = 0; i < allArgumentsJSON.length; i++) {
+                            if (allArgumentsJSON[i].id == newID) {
+                              toAdd = false;
+                            }
+                          }
+                          if (toAdd) {
+                            allArgumentsJSON.push(argumentJSON);
+                          }
                           getOneArgument();
                         });
                       } else {
