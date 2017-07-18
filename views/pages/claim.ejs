@@ -1,0 +1,36 @@
+
+<% include ../partials/begin-body.ejs %>
+
+<table>
+
+  <% include ../partials/table-rows/table-format.ejs %>
+  <% include ../partials/table-rows/header.ejs %>
+  <% include ../partials/table-rows/empty.ejs %>
+
+  <tr>
+    <td colspan='1' class='width1'></td>
+    <td colspan='3' class='width3'>
+      <div class='content-panel'>
+        </br>
+        This is the page for a piece of information in the CT database.
+        </br>
+        </br>
+        Right now all that is here is a JSON blob. (Yikes!)
+        </br>
+        </br>
+        More interesting information is on its way...
+        </br>
+        </br>
+        <pre class='font-formatting'><%-JSON.stringify(
+            claimResults, null, 4); %></pre>
+        <pre class='font-formatting'><%-JSON.stringify(
+            assertableResults, null, 4); %></pre>
+        </br>
+      </div>
+    </td>
+    <td colspan='1' class='width1'></td>
+  </tr>
+
+</table>
+
+<% include ../partials/end-body.ejs %>

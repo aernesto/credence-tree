@@ -2,49 +2,99 @@
 <%
 
 function expandAssertion (assertionObj) {
+
   if (assertionObj != undefined) {
-    var typeA = assertionObj.typeA,
-        typeB = assertionObj.typeB,
-        left = assertionObj.left,
-        right = assertionObj.right,
-        prop = assertionObj.prop;
-    if (typeA == 1) {
-      var opString = 'error',
-          rightString = expandAssertion(right);
-      if (typeB == 2) { opString = '~'; }
-      else if (typeB == 3) { opString = '&#9671;'; }
-      else if (typeB == 4) { opString = '&#9633;'; }
-      return opString + '(' + rightString + ')'; }
-    else if (typeA == 2) {
-      var opString = 'error',
-          leftString = expandAssertion(left),
-          rightString = expandAssertion(right);
-      if (typeB == 1) { opString = '&#8743;'; }
-      else if (typeB == 2) { opString = '&#8744;'; }
-      else if (typeB == 3) { opString = '&#8594;'; }
-      else if (typeB == 4) { opString = '&#8596;'; }
-      else if (typeB == 5) { opString = '='; }
-      return '(' + leftString + ')' +
-          opString + '(' + rightString + ')'; }
-    else if (typeA == 3) { return prop; }
-    else { return 'error'; }}
-  else { return 'error'; }}
+
+    var unary = false;
+    var binary = false;
+    var symbol = '';
+    var other = {};
+
+    if ('proposition' in assertionObj) {
+      return "<a href='/claim?id=" +
+        assertionObj.id + "'>" +
+        assertionObj.proposition + "</a>";
+
+    // unary operators
+    } else if ('not' in assertionObj) {
+      unary = true;
+      symbol = '~';
+      other = assertionObj.not;
+    } else if ('possibly' in assertionObj) {
+      unary = true;
+      symbol = '&#9671;';
+      other = assertionObj.possibly;
+    } else if ('necessarily' in assertionObj) {
+      unary = true;
+      symbol = '&#9633;';
+      other = assertionObj.necessarily;
+
+    // binary operators
+    } else if ('and' in assertionObj) {
+      binary = true;
+      symbol = '&#8743;';
+      other = assertionObj.and;
+    } else if ('or' in assertionObj) {
+      binary = true;
+      symbol = '&#8744;';
+      other = assertionObj.or;
+    } else if ('implies' in assertionObj) {
+      binary = true;
+      symbol = '&#8594;';
+      other = assertionObj.implies;
+    } else if ('if and only if' in assertionObj) {
+      binary = true;
+      symbol = '&#8596;';
+      other = assertionObj['if and only if'];
+    } else if ('is identical to' in assertionObj) {
+      binary = true;
+      symbol = '=';
+      other = assertionObj['is identical to'];
+    }
+
+    if (unary) {
+      return "<a href='/claim?id=" + assertionObj.id +
+          "'>" + symbol + "</a> ( " + expandAssertion(other) + " )";
+    }
+
+    if (binary) {
+      var left = expandAssertion(other[0]);
+      var right = expandAssertion(other[1]);
+      return "( " + left + " ) <a href='/claim?id=" + assertionObj.id +
+          "'>" + symbol + "</a> ( " + right + " )";
+    }
+
+  } else {
+    return 'error';
+  }
+}
 
 function expandArgument (argumentObj) {
+
+  console.log('expandArgument: argumentObj = ' +
+      JSON.stringify(argumentObj));
+
   if (argumentObj != undefined) {
-    var premiseID = 1,
-        returnString = '';
-    while (true) {
-      var curPremiseID = 'P' + premiseID,
-          curPremiseVal = argumentObj[curPremiseID];
-      if (curPremiseVal) {
-        if (premiseID > 1) { returnString += '<br/>'; }
-        returnString += curPremiseID + ': ' + expandAssertion(curPremiseVal);
-        premiseID++; }
-      else { break; } }
-    returnString += '<br/>C: ' + expandAssertion(argumentObj['C']);
-    return returnString; }
-  else { return 'error'; }}
+
+    var i;
+    var returnString = '';
+    for (i = 0; i < argumentObj.premises.length; i++) {
+      if (i > 0) {
+        returnString += "</br>";
+      }
+      returnString += "<a href='/claim?id=" + argumentObj.id +
+        "'>" + 'P' + (i+1) + "</a>: " + 
+        expandAssertion(argumentObj.premises[i]);
+    }
+
+    return returnString + "</br><a href='/claim?id=" + argumentObj.id +
+        "'>" + 'C' + "</a>: " + 
+        expandAssertion(argumentObj.conclusion);
+
+  } else {
+    return 'error';
+  }
+}
 
 %>
 
@@ -74,7 +124,7 @@ function expandArgument (argumentObj) {
         <% for (var i = 0; i < assertionResults.length; i++) { %>
           <% var assertionObj = assertionResults[i]; %>
           <% if (i > 0) { %> <br/> <br/> <% } %>
-          <%- expandAssertion(assertionObj); %>
+          <%- expandAssertion(assertionObj.asserts); %>
         <% } %>
 
       <% } %>

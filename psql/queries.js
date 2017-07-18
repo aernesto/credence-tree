@@ -2134,9 +2134,11 @@ module.exports = function (environment, pg) {
       });
     },
 
-    search: function (htmlForm, callback) {
+    search: function (htmlForm, callbackOuter) {
 
       // TODO: actual searching
+
+      // OLD: version 1
 
       // var json;
       // if ('query' in htmlForm) {
@@ -2154,27 +2156,240 @@ module.exports = function (environment, pg) {
       //   });
       // });
 
-      if ('query' in htmlForm) {
+      // OLD: version 2
+
+      // if ('query' in htmlForm) {
+      //   connectToDatabase( function (query, done) {
+      //     var results = 'basic search results:';
+      //     searchProposition(query, htmlForm['query'], function (ids) {
+      //       function getOne () {
+      //         var id = ids.pop();
+      //         if (id != undefined) {
+      //           fetchProposition(query, id, function (text) {
+      //             results += '</br></br>' + text;
+      //             getOne();
+      //           });
+      //         } else {
+      //           done();
+      //           callback(results);
+      //         }
+      //       }
+      //       getOne();
+      //     });
+      //   });
+      // } else {
+      //   callback('advanced search coming soon!');
+      // }
+
+      function doSearch (assertableJSON, callbackMiddle) {
+
+        console.log('doSearch(): assertableJSON = ' +
+            JSON.stringify(assertableJSON));
+
         connectToDatabase( function (query, done) {
-          var results = 'basic search results:';
-          searchProposition(query, htmlForm['query'], function (ids) {
-            function getOne () {
-              var id = ids.pop();
-              if (id != undefined) {
-                fetchProposition(query, id, function (text) {
-                  results += '</br></br>' + text;
-                  getOne();
-                });
-              } else {
-                done();
-                callback(results);
+
+          function doOneAssertionSearch (thingToSearch, callbackInner) {
+
+            searchAssertable(query, thingToSearch, function (assertableIDs) {
+              console.log('assertableIDs = ' + assertableIDs);
+
+              if (assertableIDs == undefined) {
+                assertableIDs = [];
               }
-            }
-            getOne();
-          });
+
+              var allAssertionJSON = [];
+              function getOneAssertable () {
+                var assertableID = assertableIDs.pop();
+                if (assertableID != undefined) {
+                  console.log('searching assertableID ' + assertableID);
+                  query('select distinct c.id from assertion c, ' +
+                      'unary_assertable u, binary_assertable b ' +
+                      'where (c.assertable = $1) or ($1 = any(u.dependencies) ' +
+                      'and c.assertable = u.id) or (($1 = any(b.dependencies1) ' +
+                      'or $1 = any(b.dependencies2)) and c.assertable = b.id)',
+                      [assertableID], function (assertionIDs) {
+
+                    if (assertionIDs == undefined) {
+                      assertionIDs = [];
+                    }
+
+                    function getOneAssertion () {
+                      var assertionID = assertionIDs.pop();
+                      if (assertionID != undefined) {
+                        console.log('fetchClaim ' + JSON.stringify(assertionID));
+                        fetchClaim(query, assertionID.id, function (assertionJSON) {
+                          allAssertionJSON.push(assertionJSON);
+                          getOneAssertion();
+                        });
+                      } else {
+                        getOneAssertable();
+                      }
+                    }
+
+                    getOneAssertion();
+
+                  });
+                } else {
+                  console.log('search results: assertions: ' +
+                      JSON.stringify(allAssertionJSON));
+                  callbackInner({
+                    'assertions': allAssertionJSON,
+                    'arguments': []
+                  });
+                }
+              }
+
+              getOneAssertable();
+
+              // fetchListOfThings(query, fetchAssertable,
+              //     assertableIDs, function (resultJSON) {
+              //   done();
+              //   console.log('returning from search(), resultJSON = ' +
+              //       JSON.stringify(resultJSON));
+              //   callback({'assertions':resultJSON});
+              // });
+
+            });
+
+          }
+
+          // TODO: refactor for similarity with doOneAssertionSearch?
+          function doOneArgumentSearch (thingToSearch, callbackInner) {
+
+            searchAssertable(query, thingToSearch, function (assertableIDs) {
+              console.log('assertableIDs = ' + assertableIDs);
+
+              if (assertableIDs == undefined) {
+                assertableIDs = [];
+              }
+
+              var allArgumentsJSON = [];
+              function getOneAssertable () {
+                var assertableID = assertableIDs.pop();
+                if (assertableID != undefined) {
+                  console.log('searching assertableID ' + assertableID);
+                  query('select distinct c.id from argument c, ' +
+                      'unary_assertable u, binary_assertable b, ' +
+                      'list_of_assertables_element l ' +
+                      'where (c.conclusion = $1 or (l.list = c.premises ' +
+                      'and l.assertable = $1)) or ($1 = any(u.dependencies) ' +
+                      'and (c.conclusion = u.id or (l.list = c.premises ' +
+                      'and l.assertable = u.id))) or (($1 = any(b.dependencies1) ' +
+                      'or $1 = any(b.dependencies2)) and (c.conclusion = b.id ' +
+                      'or (l.list = c.premises and l.assertable = b.id)))',
+                      [assertableID], function (argumentIDs) {
+
+                    if (argumentIDs == undefined) {
+                      argumentIDs = [];
+                    }
+
+                    function getOneArgument () {
+                      var argumentID = argumentIDs.pop();
+                      if (argumentID != undefined) {
+                        console.log('fetchClaim ' + JSON.stringify(argumentID));
+                        fetchClaim(query, argumentID.id, function (assertionJSON) {
+                          allArgumentsJSON.push(assertionJSON);
+                          getOneArgument();
+                        });
+                      } else {
+                        getOneAssertable();
+                      }
+                    }
+
+                    getOneArgument();
+
+                  });
+                } else {
+                  console.log('search results: arguments: ' +
+                      JSON.stringify(allArgumentsJSON));
+                  callbackInner({
+                    'assertions': [],
+                    'arguments': allArgumentsJSON
+                  });
+                }
+              }
+
+              getOneAssertable();
+
+            });
+
+          }
+
+          var thing1 = {},
+              thing2 = {},
+              twoThings = false;
+
+          if ('assertion' in assertableJSON) {
+            doOneAssertionSearch(assertableJSON.assertion,
+                function (assertionResults) {
+              doOneArgumentSearch(assertableJSON.assertion,
+                  function (argumentResults) {
+                var allResults = {};
+                allResults.assertions = assertionResults.assertions;
+                allResults.arguments = argumentResults.arguments;
+                console.log('search results: one assertion: ' +
+                    JSON.stringify(allResults));
+                callbackMiddle(allResults);
+              });
+            });
+
+          } else if ('group and' in assertableJSON) {
+            thing1 = assertableJSON['group and'][0];
+            thing2 = assertableJSON['group and'][1];
+            twoThings = true;
+          } else if ('group or' in assertableJSON) {
+            thing1 = assertableJSON['group or'][0];
+            thing2 = assertableJSON['group or'][1];
+            twoThings = true;
+          } else if ('group not' in assertableJSON) {
+            thing1 = assertableJSON['group not'][0];
+            thing2 = assertableJSON['group not'][1];
+            twoThings = true;
+
+          } else if ('basic citation' in assertableJSON) {
+            callbackMiddle({
+              'assertions': [],
+              'arguments': []
+            });
+          } else if ('full citation' in assertableJSON) {
+            callbackMiddle({
+              'assertions': [],
+              'arguments': []
+            });
+          }
+
+          if (twoThings) {
+            doSearch(thing1, function (leftResults) {
+              doSearch(thing2, function (rightResults) {
+                var allResults = {};
+                allResults.assertions = [];
+                leftResults.assertions.forEach( function (assertion) {
+                  allResults.assertions.push(assertion); });
+                rightResults.assertions.forEach( function (assertion) {
+                  allResults.assertions.push(assertion); });
+                allResults.arguments = [];
+                leftResults.arguments.forEach( function (argument) {
+                  allResults.arguments.push(argument); });
+                rightResults.arguments.forEach( function (argument) {
+                  allResults.arguments.push(argument); });
+                console.log('search results: twoThings: ' +
+                    JSON.stringify(allResults));
+                callbackMiddle(allResults);
+              });
+            });
+          }
+
         });
+
+      }
+
+      if ('query' in htmlForm) {
+        doSearch({'proposition':htmlForm['query']}, callbackOuter);
       } else {
-        callback('advanced search coming soon!');
+        htmlFormToJson(htmlForm, function (json,
+            errorMessages, listOfPropositions, listOfFullCitations) {
+          doSearch(json, callbackOuter);
+        });
       }
 
     },

@@ -102,13 +102,13 @@ function getUserID (request) {
 
 // set-up routing and app logic
 
-// FOR TESTING NEW DB LAYER
-// app.get('/fetchAssertable', function (request, response) {
-//   database.fetchAssertable(request.query['id'], function (result) {
-//     response.write(JSON.stringify(result, null, 4)); response.end(); }); });
-// app.get('/fetchClaim', function (request, response) {
-//   database.fetchClaim(request.query['id'], function (result) {
-//     response.write(JSON.stringify(result, null, 4)); response.end(); }); });
+// FOR TESTING NEW DB LAYER (TODO: remove later)
+app.get('/fetchAssertable', function (request, response) {
+  database.fetchAssertable(request.query['id'], function (result) {
+    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
+app.get('/fetchClaim', function (request, response) {
+  database.fetchClaim(request.query['id'], function (result) {
+    response.write(JSON.stringify(result, null, 4)); response.end(); }); });
 // app.get('/searchProposition', function (request, response) {
 //   database.searchProposition(request.query['query'], function (result) {
 //     response.write(JSON.stringify(result, null, 4)); response.end(); }); });
@@ -151,19 +151,28 @@ app.get('/admin', function (request, response) {
   response.render('pages/md-file-wrapper', {
     userInfo: request.session.userInfo, md: md,
     filename: 'coming-soon.md'}); });
+
 app.get('/claim', function (request, response) {
-  response.render('pages/md-file-wrapper', {
-    userInfo: request.session.userInfo, md: md,
-    filename: 'coming-soon.md'}); });
+  var queryObj = request.query;
+  database.fetchClaim(queryObj.id, function (claimResults) {
+    database.fetchAssertable(queryObj.id, function (assertableResults) {
+      response.render('pages/claim', {
+        userInfo: request.session.userInfo,
+        claimResults: claimResults,
+        assertableResults: assertableResults,
+        query: queryObj
+      });
+    });
+  });
+});
 
 app.get('/search', function (request, response) {
   var queryObj = request.query;
   database.search(queryObj, function (dbResults) {
     response.render('pages/search', {
       userInfo: request.session.userInfo,
-      // assertionResults: dbResults.assertions,
-      // argumentResults: dbResults.arguments,
-      dbResults: dbResults,
+      assertionResults: dbResults.assertions,
+      argumentResults: dbResults.arguments,
       query: queryObj }); }); });
 
 app.get('/contribute', function (request, response) {
@@ -251,16 +260,16 @@ app.get('/join', function (request, response) {
 var port = app.get('port');
 app.listen(port, function () {
 
-  var test1 = {"implies":[{"proposition":"thing"},undefined]};
-  database.searchAssertable(test1, function (results1) {
-    console.log('results1 = ' + results1);
+  // var test1 = {"implies":[{"proposition":"thing"},undefined]};
+  // database.searchAssertable(test1, function (results1) {
+  //   console.log('results1 = ' + results1);
 
-    var test2 = {"not":undefined};
-    database.searchAssertable(test2, function (results2) {
-      console.log('results2 = ' + results2);
-    });
+  //   var test2 = {"not":undefined};
+  //   database.searchAssertable(test2, function (results2) {
+  //     console.log('results2 = ' + results2);
+  //   });
 
-  });
+  // });
   
   console.log('Credence Tree is now running on port ' + port + '.'); });
 
