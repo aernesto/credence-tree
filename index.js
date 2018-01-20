@@ -15,7 +15,7 @@ app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 
 var cookieParser = require('cookie-parser');
-app.use(cookieParser());
+app.use(cookieParser('blabla'));
 
 var lessMiddleware = require('less-middleware');
 app.use(lessMiddleware(__dirname + '/public')); // 1
